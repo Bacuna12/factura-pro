@@ -45,8 +45,6 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   });
 
   const [aiLoading, setAiLoading] = useState<string | null>(null);
-  
-  // Estados para creación rápida
   const [isQuickClientOpen, setIsQuickClientOpen] = useState(false);
   const [isQuickProductOpen, setIsQuickProductOpen] = useState(false);
   const [quickClient, setQuickClient] = useState<Client>({
@@ -56,7 +54,6 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     id: '', description: '', unitPrice: 0, category: 'General', sku: ''
   });
 
-  // Estados para selector de productos
   const [isProductSelectorOpen, setIsProductSelectorOpen] = useState(false);
   const [activeItemSelectorId, setActiveItemSelectorId] = useState<string | null>(null);
   const [productSearchTerm, setProductSearchTerm] = useState('');
@@ -105,7 +102,6 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     setDoc({ ...doc, items: newItems });
   };
 
-  // Crear Cliente Rápido
   const handleQuickClientSave = (e: React.FormEvent) => {
     e.preventDefault();
     const newId = Math.random().toString(36).substr(2, 9);
@@ -116,14 +112,11 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     setQuickClient({ id: '', name: '', email: '', taxId: '', address: '', city: '', municipality: '', zipCode: '' });
   };
 
-  // Crear Producto Rápido
   const handleQuickProductSave = (e: React.FormEvent) => {
     e.preventDefault();
     const newId = Math.random().toString(36).substr(2, 9);
     const newProduct = { ...quickProduct, id: newId, sku: `PROD-${Math.floor(1000 + Math.random() * 9000)}` };
     onUpdateProducts([newProduct, ...products]);
-    
-    // Si hay un item activo en el editor, asignarle este nuevo producto
     if (activeItemSelectorId) {
       const newItems = doc.items.map(item => {
         if (item.id === activeItemSelectorId) {
@@ -133,7 +126,6 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
       });
       setDoc({ ...doc, items: newItems });
     }
-    
     setIsQuickProductOpen(false);
     setIsProductSelectorOpen(false);
     setQuickProduct({ id: '', description: '', unitPrice: 0, category: 'General', sku: '' });
@@ -172,7 +164,10 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave(doc);
-    navigate(type === DocumentType.INVOICE ? '/invoices' : isCollection ? '/collections' : '/quotes');
+    // Redirección explícita basada en el tipo del documento actual
+    if (type === DocumentType.INVOICE) navigate('/invoices');
+    else if (type === DocumentType.ACCOUNT_COLLECTION) navigate('/collections');
+    else navigate('/quotes');
   };
 
   return (
@@ -197,7 +192,9 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
               <button 
                 type="button" 
                 onClick={() => setIsQuickClientOpen(true)}
-                className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl hover:bg-blue-100"
+                className={`text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors ${
+                  isCollection ? 'text-violet-600 bg-violet-50 hover:bg-violet-100' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+                }`}
               >
                 + Crear Cliente Rápido
               </button>
@@ -209,7 +206,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                 <select 
                   value={doc.clientId}
                   onChange={(e) => setDoc({ ...doc, clientId: e.target.value })}
-                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 ${isCollection ? 'focus:ring-violet-500' : 'focus:ring-blue-500'}`}
                   required
                 >
                   <option value="">Selecciona un cliente</option>
@@ -218,11 +215,11 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
               </div>
               <div>
                 <label className="block text-xs font-black text-gray-500 uppercase mb-2">Fecha de Emisión</label>
-                <input type="date" value={doc.date} onChange={(e) => setDoc({ ...doc, date: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" required />
+                <input type="date" value={doc.date} onChange={(e) => setDoc({ ...doc, date: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" required />
               </div>
               <div>
                 <label className="block text-xs font-black text-gray-500 uppercase mb-2">Fecha de Vencimiento</label>
-                <input type="date" value={doc.dueDate} onChange={(e) => setDoc({ ...doc, dueDate: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" required />
+                <input type="date" value={doc.dueDate} onChange={(e) => setDoc({ ...doc, dueDate: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" required />
               </div>
             </div>
           </div>
@@ -230,7 +227,15 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
           <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100 space-y-6">
             <div className="flex justify-between items-center">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Conceptos Cobrados</p>
-              <button type="button" onClick={handleAddItem} className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl hover:bg-blue-100 transition-colors">+ Añadir Ítem</button>
+              <button 
+                type="button" 
+                onClick={handleAddItem} 
+                className={`text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors ${
+                  isCollection ? 'text-violet-600 bg-violet-50 hover:bg-violet-100' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+                }`}
+              >
+                + Añadir Ítem
+              </button>
             </div>
             
             <div className="space-y-4">
@@ -239,7 +244,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                   <div className="flex-1 w-full">
                     <div className="flex justify-between mb-1">
                       <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Descripción</label>
-                      <button type="button" onClick={() => openCatalogFor(item.id)} className="text-[9px] font-bold text-indigo-600 underline">Catálogo / Nuevo</button>
+                      <button type="button" onClick={() => openCatalogFor(item.id)} className={`text-[9px] font-bold underline ${isCollection ? 'text-violet-600' : 'text-indigo-600'}`}>Catálogo / Nuevo</button>
                     </div>
                     <input 
                       type="text"
@@ -266,7 +271,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
           <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100 space-y-4">
              <div className="flex justify-between items-center">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Observaciones y Notas Legales</p>
-              <button type="button" onClick={handleSuggestNotes} className="text-[10px] font-black text-blue-600">🪄 Asistente IA</button>
+              <button type="button" onClick={handleSuggestNotes} className={`text-[10px] font-black ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>🪄 Asistente IA</button>
             </div>
             <textarea 
               value={doc.notes}
@@ -278,7 +283,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
         </div>
 
         <div className="space-y-6">
-          <div className={`p-8 rounded-[40px] shadow-xl text-white ${isCollection ? 'bg-violet-600 shadow-violet-200' : 'bg-slate-900 shadow-slate-200'} sticky top-10 transition-colors`}>
+          <div className={`p-8 rounded-[40px] shadow-xl text-white sticky top-10 transition-colors ${isCollection ? 'bg-violet-600 shadow-violet-200' : 'bg-slate-900 shadow-slate-200'}`}>
             <h3 className="text-xl font-black mb-8 border-b border-white/10 pb-4">Resumen Financiero</h3>
             
             <div className="space-y-4">
@@ -301,6 +306,10 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                   <span>Retención ({doc.withholdingRate}%)</span>
                   <span className="text-rose-300">-{formatCurrency(withholding)}</span>
                 </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-[9px] font-black uppercase text-white/40">Ajustar % Retención:</label>
+                  <input type="number" value={doc.withholdingRate} onChange={e => setDoc({...doc, withholdingRate: parseFloat(e.target.value)})} className="bg-white/10 border-none rounded-lg w-12 text-[10px] p-1 text-center font-bold" />
+                </div>
               </div>
 
               <div className="pt-6 border-t border-white/10 space-y-1">
@@ -318,11 +327,10 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
         </div>
       </div>
 
-      {/* MODAL: Selector de Catálogo + Opción Crear Nuevo */}
       {isProductSelectorOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[150] flex items-center justify-center p-4">
           <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden animate-slideUp">
-            <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-indigo-600 text-white">
+            <div className={`p-6 border-b border-gray-50 flex justify-between items-center text-white ${isCollection ? 'bg-violet-600' : 'bg-indigo-600'}`}>
               <h3 className="font-black text-xl">Mi Catálogo</h3>
               <button onClick={() => setIsProductSelectorOpen(false)} className="text-2xl">✕</button>
             </div>
@@ -330,7 +338,9 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                <button 
                 type="button" 
                 onClick={() => { setIsQuickProductOpen(true); }}
-                className="w-full p-4 bg-white border border-dashed border-indigo-200 text-indigo-600 font-black rounded-2xl hover:bg-indigo-50 transition-all mb-4"
+                className={`w-full p-4 bg-white border border-dashed text-sm font-black rounded-2xl hover:bg-gray-50 transition-all mb-4 ${
+                  isCollection ? 'border-violet-200 text-violet-600' : 'border-indigo-200 text-indigo-600'
+                }`}
               >
                 ✨ Crear Nuevo Producto Rápido
               </button>
@@ -348,10 +358,12 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                   key={p.id} 
                   type="button" 
                   onClick={() => handleSelectProductFromCatalog(p)}
-                  className="w-full p-4 text-left hover:bg-indigo-50 rounded-2xl border border-gray-100 transition-colors flex justify-between items-center group"
+                  className={`w-full p-4 text-left rounded-2xl border border-gray-100 transition-colors flex justify-between items-center group ${
+                    isCollection ? 'hover:bg-violet-50' : 'hover:bg-indigo-50'
+                  }`}
                 >
-                  <span className="font-bold group-hover:text-indigo-700">{p.description}</span>
-                  <span className="text-blue-600 font-black">{formatCurrency(p.unitPrice)}</span>
+                  <span className={`font-bold transition-colors ${isCollection ? 'group-hover:text-violet-700' : 'group-hover:text-indigo-700'}`}>{p.description}</span>
+                  <span className={`font-black ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>{formatCurrency(p.unitPrice)}</span>
                 </button>
               ))}
             </div>
@@ -359,14 +371,13 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
         </div>
       )}
 
-      {/* MODAL: Creación Rápida Cliente */}
       {isQuickClientOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4">
           <div className="bg-white rounded-[40px] w-full max-w-lg overflow-hidden shadow-2xl animate-fadeIn">
-            <div className="p-8 bg-blue-600 text-white flex justify-between items-center">
+            <div className={`p-8 text-white flex justify-between items-center ${isCollection ? 'bg-violet-600' : 'bg-blue-600'}`}>
               <div>
                 <h3 className="text-2xl font-black">Nuevo Cliente</h3>
-                <p className="text-blue-100 text-sm">Registro express</p>
+                <p className="text-white/80 text-sm">Registro express</p>
               </div>
               <button onClick={() => setIsQuickClientOpen(false)} className="text-2xl">✕</button>
             </div>
@@ -385,17 +396,16 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                   <input type="email" required value={quickClient.email} onChange={e => setQuickClient({...quickClient, email: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
                 </div>
               </div>
-              <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-[24px] font-black shadow-xl shadow-blue-100 mt-4">Guardar y Seleccionar</button>
+              <button type="submit" className={`w-full py-5 text-white rounded-[24px] font-black shadow-xl mt-4 ${isCollection ? 'bg-violet-600 shadow-violet-100' : 'bg-blue-600 shadow-blue-100'}`}>Guardar y Seleccionar</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL: Creación Rápida Producto */}
       {isQuickProductOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[250] flex items-center justify-center p-4">
           <div className="bg-white rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="p-8 bg-indigo-600 text-white flex justify-between items-center">
+            <div className={`p-8 text-white flex justify-between items-center ${isCollection ? 'bg-violet-600' : 'bg-indigo-600'}`}>
               <h3 className="text-2xl font-black">Nuevo Producto</h3>
               <button onClick={() => setIsQuickProductOpen(false)} className="text-2xl">✕</button>
             </div>
@@ -406,9 +416,9 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-black uppercase text-gray-400">Precio Unitario</label>
-                <input type="number" required value={quickProduct.unitPrice} onChange={e => setQuickProduct({...quickProduct, unitPrice: parseFloat(e.target.value)})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-black text-indigo-600 text-xl" />
+                <input type="number" required value={quickProduct.unitPrice} onChange={e => setQuickProduct({...quickProduct, unitPrice: parseFloat(e.target.value)})} className={`w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-black text-xl ${isCollection ? 'text-violet-600' : 'text-indigo-600'}`} />
               </div>
-              <button type="submit" className="w-full py-5 bg-indigo-600 text-white rounded-[24px] font-black shadow-xl shadow-indigo-100 mt-4">Crear y Añadir</button>
+              <button type="submit" className={`w-full py-5 text-white rounded-[24px] font-black shadow-xl mt-4 ${isCollection ? 'bg-violet-600 shadow-violet-100' : 'bg-indigo-600 shadow-indigo-100'}`}>Crear y Añadir</button>
             </form>
           </div>
         </div>

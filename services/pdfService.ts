@@ -43,7 +43,7 @@ export const exportToPDF = (doc: Document, client: Client | undefined, settings:
   pdf.text(`ID/NIT: ${settings.companyId}`, 50, 32);
   pdf.text(settings.companyAddress, 50, 37);
 
-  pdf.setFontSize(20);
+  pdf.setFontSize(isCollection ? 18 : 20);
   pdf.setFont('helvetica', 'bold');
   pdf.text(doc.type.toUpperCase(), 195, 25, { align: 'right' });
   pdf.setFontSize(12);

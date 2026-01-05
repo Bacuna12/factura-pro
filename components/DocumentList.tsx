@@ -33,12 +33,26 @@ const DocumentList: React.FC<DocumentListProps> = ({
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
   const [newPayment, setNewPayment] = useState({ amount: 0, method: 'Transferencia', note: '' });
 
+  const isInvoice = type === DocumentType.INVOICE;
+  const isCollection = type === DocumentType.ACCOUNT_COLLECTION;
+  const isQuote = type === DocumentType.QUOTE;
+
+  // Determinar la base de la URL según el tipo
+  const getRouteBase = (docType: DocumentType) => {
+    if (docType === DocumentType.INVOICE) return '/invoices';
+    if (docType === DocumentType.ACCOUNT_COLLECTION) return '/collections';
+    return '/quotes';
+  };
+
   const getClient = (id: string) => clients.find(c => c.id === id);
   const getClientName = (id: string) => getClient(id)?.name || 'Cliente desconocido';
 
   const calculateTotal = (doc: Document) => {
     const subtotal = doc.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
-    return subtotal + (subtotal * (doc.taxRate / 100));
+    const tax = subtotal * (doc.taxRate / 100);
+    const gross = subtotal + tax;
+    const withholding = gross * ((doc.withholdingRate || 0) / 100);
+    return gross - withholding;
   };
 
   const calculatePaid = (doc: Document) => {
@@ -120,18 +134,19 @@ const DocumentList: React.FC<DocumentListProps> = ({
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">{type}S</h2>
-          <p className="text-gray-500 font-medium">Historial completo y gestión</p>
+          <p className="text-gray-500 font-medium">Historial de {type.toLowerCase()}s</p>
         </div>
         <button 
-          onClick={() => navigate(type === DocumentType.INVOICE ? '/invoices/new' : '/quotes/new')}
-          className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center space-x-2"
+          onClick={() => navigate(`${getRouteBase(type)}/new`)}
+          className={`w-full sm:w-auto px-6 py-3 text-white rounded-2xl font-bold shadow-lg transition-all flex items-center justify-center space-x-2 active:scale-95 ${
+            isCollection ? 'bg-violet-600 shadow-violet-100 hover:bg-violet-700' : 'bg-blue-600 shadow-blue-100 hover:bg-blue-700'
+          }`}
         >
           <span className="text-xl">+</span>
-          <span>Crear {type === DocumentType.INVOICE ? 'Factura' : 'Presupuesto'}</span>
+          <span>Crear {type}</span>
         </button>
       </div>
 
-      {/* Vista de Escritorio (Tabla) */}
       <div className="hidden md:block bg-white rounded-3xl shadow-sm overflow-hidden border border-gray-100">
         <table className="w-full text-left">
           <thead className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b">
@@ -139,7 +154,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
               <th className="px-6 py-4">Documento</th>
               <th className="px-6 py-4">Cliente</th>
               <th className="px-6 py-4">Estado</th>
-              <th className="px-6 py-4">Total / Saldo</th>
+              <th className="px-6 py-4">Total Neto</th>
               <th className="px-6 py-4 text-right">Acciones</th>
             </tr>
           </thead>
@@ -149,7 +164,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
               const balance = total - calculatePaid(doc);
               return (
                 <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4 font-bold text-gray-900">#{doc.number}</td>
+                  <td className={`px-6 py-4 font-bold ${isCollection ? 'text-violet-700' : 'text-gray-900'}`}>#{doc.number}</td>
                   <td className="px-6 py-4 text-gray-600 font-medium">{getClientName(doc.clientId)}</td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase ${
@@ -166,17 +181,17 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   </td>
                   <td className="px-6 py-4">
                     <div className="font-black text-gray-900">{formatCurrency(total)}</div>
-                    {balance > 0 && doc.type === DocumentType.INVOICE && (
+                    {balance > 0 && !isQuote && (
                       <div className="text-[10px] text-amber-600 font-bold">Saldo: {formatCurrency(balance)}</div>
                     )}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end space-x-1">
-                      {doc.type === DocumentType.INVOICE && balance > 0 && (
+                      {!isQuote && balance > 0 && (
                         <ActionButton onClick={() => openPaymentModal(doc)} icon="💸" color="text-emerald-600" title="Pagar" />
                       )}
                       <ActionButton onClick={() => handleExportPDF(doc)} icon="📥" color="text-indigo-600" title="PDF" />
-                      <ActionButton onClick={() => navigate(type === DocumentType.INVOICE ? `/invoices/edit/${doc.id}` : `/quotes/edit/${doc.id}`)} icon="✏️" color="text-blue-600" title="Editar" />
+                      <ActionButton onClick={() => navigate(`${getRouteBase(type)}/edit/${doc.id}`)} icon="✏️" color="text-blue-600" title="Editar" />
                       <ActionButton onClick={() => setDocToDelete(doc.id)} icon="🗑️" color="text-rose-600" title="Borrar" />
                     </div>
                   </td>
@@ -187,7 +202,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
         </table>
       </div>
 
-      {/* Vista Móvil (Tarjetas) */}
       <div className="md:hidden space-y-4">
         {filteredDocs.map(doc => {
           const total = calculateTotal(doc);
@@ -196,7 +210,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
             <div key={doc.id} className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100 space-y-4">
               <div className="flex justify-between items-start">
                 <div>
-                  <p className="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">#{doc.number}</p>
+                  <p className={`text-xs font-black uppercase tracking-widest mb-1 ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>#{doc.number}</p>
                   <h4 className="font-bold text-gray-900 truncate max-w-[150px]">{getClientName(doc.clientId)}</h4>
                 </div>
                 <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${
@@ -213,18 +227,15 @@ const DocumentList: React.FC<DocumentListProps> = ({
               </div>
               <div className="flex justify-between items-end border-t border-gray-50 pt-3">
                 <div>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Total</p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Neto</p>
                   <p className="text-xl font-black text-gray-900">{formatCurrency(total)}</p>
-                  {balance > 0 && doc.type === DocumentType.INVOICE && (
-                    <p className="text-xs text-amber-600 font-bold">Saldo: {formatCurrency(balance)}</p>
-                  )}
                 </div>
                 <div className="flex space-x-2">
-                  {doc.type === DocumentType.INVOICE && balance > 0 && (
+                  {!isQuote && balance > 0 && (
                     <button onClick={() => openPaymentModal(doc)} className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center shadow-sm">💸</button>
                   )}
                   <button onClick={() => handleExportPDF(doc)} className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-sm">📥</button>
-                  <button onClick={() => navigate(type === DocumentType.INVOICE ? `/invoices/edit/${doc.id}` : `/quotes/edit/${doc.id}`)} className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shadow-sm">✏️</button>
+                  <button onClick={() => navigate(`${getRouteBase(type)}/edit/${doc.id}`)} className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shadow-sm">✏️</button>
                 </div>
               </div>
             </div>
@@ -234,13 +245,13 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
       {filteredDocs.length === 0 && (
         <div className="py-20 text-center bg-white rounded-3xl border border-gray-100 border-dashed">
-          <div className="text-5xl mb-4">📂</div>
+          <div className="text-5xl mb-4">{isCollection ? '📝' : '📂'}</div>
           <h3 className="text-lg font-bold text-gray-800">No hay {type.toLowerCase()}s</h3>
           <p className="text-gray-400 max-w-xs mx-auto">Comienza creando tu primer documento profesional hoy mismo.</p>
         </div>
       )}
 
-      {type === DocumentType.INVOICE && (
+      {isInvoice && (
         <div className="pt-10">
           <ProductManager 
             products={products} 
@@ -250,7 +261,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
         </div>
       )}
 
-      {/* Modal de Pago Optimizado */}
       {showPaymentModal && selectedDoc && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-slideUp">
