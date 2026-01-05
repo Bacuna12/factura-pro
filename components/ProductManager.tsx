@@ -1,6 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Product, AppSettings } from '../types';
+import { optimizeProductListing } from '../services/geminiService';
 import ConfirmModal from './ConfirmModal';
 
 interface ProductManagerProps {
@@ -13,7 +14,23 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeCategory, setActiveCategory] = useState('Todas');
+  const [isAiLoading, setIsAiLoading] = useState(false);
+
+  const categories = useMemo(() => {
+    const cats = new Set(products.map(p => p.category || 'Sin Categoría'));
+    return ['Todas', ...Array.from(cats)];
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    return products.filter(p => {
+      const matchesSearch = p.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                           (p.sku || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCategory = activeCategory === 'Todas' || (p.category || 'Sin Categoría') === activeCategory;
+      return matchesSearch && matchesCategory;
+    });
+  }, [products, searchTerm, activeCategory]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-CO', {
@@ -21,6 +38,19 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
       currency: settings.currency,
       minimumFractionDigits: 0
     }).format(amount);
+  };
+
+  const handleOptimizeWithAi = async () => {
+    if (!editingProduct?.description) return;
+    setIsAiLoading(true);
+    const optimized = await optimizeProductListing(editingProduct.description);
+    setEditingProduct({
+      ...editingProduct,
+      description: optimized.description,
+      unitPrice: optimized.suggestedPrice || editingProduct.unitPrice,
+      category: optimized.category
+    });
+    setIsAiLoading(false);
   };
 
   const openEditModal = (product: Product) => {
@@ -32,7 +62,9 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
     setEditingProduct({
       id: Math.random().toString(36).substr(2, 9),
       description: '',
-      unitPrice: 0
+      unitPrice: 0,
+      sku: `PROD-${Math.floor(1000 + Math.random() * 9000)}`,
+      category: 'General'
     });
     setIsModalOpen(true);
   };
@@ -54,159 +86,174 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
     setEditingProduct(null);
   };
 
-  const confirmDelete = () => {
-    if (productToDelete) {
-      onUpdateProducts(products.filter(p => p.id !== productToDelete));
-      setProductToDelete(null);
-    }
-  };
-
-  const confirmClearAll = () => {
-    onUpdateProducts([]);
-    setShowClearConfirm(false);
-  };
-
   return (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Modales de Confirmación */}
+    <div className="space-y-6 animate-fadeIn pb-10">
       <ConfirmModal 
         isOpen={!!productToDelete}
         title="Eliminar Producto"
-        message="¿Deseas quitar este producto de tu biblioteca de autocompletado?"
-        onConfirm={confirmDelete}
+        message="¿Estás seguro de que deseas eliminar este producto de tu catálogo?"
+        onConfirm={() => {
+          onUpdateProducts(products.filter(p => p.id !== productToDelete));
+          setProductToDelete(null);
+        }}
         onCancel={() => setProductToDelete(null)}
       />
 
-      <ConfirmModal 
-        isOpen={showClearConfirm}
-        title="Vaciar Biblioteca"
-        message="¿Estás seguro de que deseas eliminar TODOS los productos guardados? Esta acción es irreversible."
-        onConfirm={confirmClearAll}
-        onCancel={() => setShowClearConfirm(false)}
-      />
-
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-gray-800">Catálogo de Productos</h2>
-          <p className="text-gray-500">Gestiona tus servicios y precios guardados</p>
+          <h2 className="text-3xl font-black text-gray-900 tracking-tight">Catálogo de Productos</h2>
+          <p className="text-gray-500 font-medium">Gestiona tus servicios y productos con IA</p>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
-          {products.length > 0 && (
-            <button 
-              onClick={() => setShowClearConfirm(true)}
-              className="px-4 py-2.5 text-rose-600 bg-rose-50 border border-rose-100 rounded-xl font-bold hover:bg-rose-100 transition-all text-sm"
+        <button 
+          onClick={openAddModal}
+          className="w-full md:w-auto px-6 py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center space-x-2"
+        >
+          <span>+</span>
+          <span>Nuevo Producto</span>
+        </button>
+      </div>
+
+      {/* Barra de Búsqueda y Filtros */}
+      <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4">
+        <div className="relative flex-1">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+          <input 
+            type="text"
+            placeholder="Buscar por nombre o referencia..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            className="w-full pl-12 pr-4 py-3 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm"
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+          {categories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={`px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest whitespace-nowrap transition-all ${
+                activeCategory === cat 
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' 
+                : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
+              }`}
             >
-              Vaciar Lista
+              {cat}
             </button>
-          )}
-          <button 
-            onClick={openAddModal}
-            className="flex-1 sm:flex-none px-5 py-2.5 bg-blue-600 text-white rounded-xl font-bold shadow-md hover:bg-blue-700 transition-all flex items-center justify-center space-x-2"
-          >
-            <span>+</span>
-            <span>Nuevo Producto</span>
-          </button>
+          ))}
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-gray-50 text-xs font-bold text-gray-400 uppercase tracking-widest border-b">
-              <tr>
-                <th className="px-6 py-4">Descripción</th>
-                <th className="px-6 py-4">Precio Base</th>
-                <th className="px-6 py-4 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {products.map(product => (
-                <tr key={product.id} className="hover:bg-gray-50 group transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="font-semibold text-gray-800">{product.description}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-gray-900 font-bold">{formatCurrency(product.unitPrice)}</div>
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end space-x-1">
-                      <button 
-                        onClick={() => openEditModal(product)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Editar producto"
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        onClick={() => setProductToDelete(product.id)}
-                        className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="Eliminar de la biblioteca"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {products.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="py-20 text-center text-gray-400 italic">
-                    <div className="text-4xl mb-2">📦</div>
-                    <p>No hay productos guardados.</p>
-                    <p className="text-xs">Se guardan automáticamente al crear facturas.</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {isModalOpen && editingProduct && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-slideUp">
-            <div className="bg-blue-600 p-6 text-white">
-              <h3 className="text-xl font-bold">Gestionar Producto</h3>
-              <p className="text-blue-100 text-sm">Define el nombre y precio base</p>
+      {/* Grid de Productos */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredProducts.map(product => (
+          <div key={product.id} className="bg-white p-6 rounded-[32px] shadow-sm border border-gray-100 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-500/5 transition-all group relative">
+            <div className="flex justify-between items-start mb-4">
+              <div className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-widest">
+                {product.category || 'General'}
+              </div>
+              <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => openEditModal(product)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl">✏️</button>
+                <button onClick={() => setProductToDelete(product.id)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl">🗑️</button>
+              </div>
             </div>
-            <form onSubmit={handleSave} className="p-6 space-y-4">
+            
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{product.sku || 'S/R'}</p>
+            <h3 className="font-black text-xl text-gray-900 mb-4 line-clamp-2 min-h-[3.5rem]">{product.description}</h3>
+            
+            <div className="flex justify-between items-end pt-4 border-t border-gray-50">
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Descripción</label>
-                <input 
-                  type="text" 
-                  required
-                  value={editingProduct.description}
-                  onChange={e => setEditingProduct({...editingProduct, description: e.target.value})}
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Ej. Consultoría de Software"
-                />
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Precio Unitario</p>
+                <p className="text-2xl font-black text-blue-600">{formatCurrency(product.unitPrice)}</p>
               </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Precio Unitario ({settings.currency})</label>
-                <input 
-                  type="number" 
-                  required
-                  value={editingProduct.unitPrice}
-                  onChange={e => setEditingProduct({...editingProduct, unitPrice: parseFloat(e.target.value)})}
-                  className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0.00"
-                />
+              <div className="text-2xl opacity-20">📦</div>
+            </div>
+          </div>
+        ))}
+
+        {filteredProducts.length === 0 && (
+          <div className="col-span-full py-24 text-center bg-white rounded-[40px] border border-gray-100 border-dashed">
+            <div className="text-6xl mb-4">📦</div>
+            <h3 className="text-xl font-black text-gray-800">Catálogo Vacío</h3>
+            <p className="text-gray-400 max-w-xs mx-auto font-medium">No se encontraron productos con esos criterios de búsqueda.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Modal de Edición */}
+      {isModalOpen && editingProduct && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-white rounded-t-[40px] sm:rounded-[40px] shadow-2xl w-full max-w-lg overflow-hidden animate-slideUp">
+            <div className="bg-slate-900 p-8 text-white relative">
+              <h3 className="text-2xl font-black">{products.find(p => p.id === editingProduct.id) ? 'Editar Producto' : 'Añadir al Catálogo'}</h3>
+              <p className="text-slate-400 font-medium text-sm">Organiza tu biblioteca comercial</p>
+              <button onClick={() => setIsModalOpen(false)} className="absolute top-8 right-8 text-white/40 hover:text-white text-2xl">✕</button>
+            </div>
+            
+            <form onSubmit={handleSave} className="p-8 space-y-6">
+              <div className="space-y-5">
+                <div className="relative">
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Nombre del Producto/Servicio</label>
+                    <button 
+                      type="button"
+                      onClick={handleOptimizeWithAi}
+                      disabled={isAiLoading || !editingProduct.description}
+                      className="text-[10px] font-black text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                    >
+                      <span>{isAiLoading ? '⌛ Optimizando...' : '✨ Optimizar con IA'}</span>
+                    </button>
+                  </div>
+                  <input 
+                    type="text" required
+                    value={editingProduct.description}
+                    onChange={e => setEditingProduct({...editingProduct, description: e.target.value})}
+                    className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                    placeholder="Ej. Consultoría Estratégica Mensual"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Referencia / SKU</label>
+                    <input 
+                      type="text"
+                      value={editingProduct.sku}
+                      onChange={e => setEditingProduct({...editingProduct, sku: e.target.value})}
+                      className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                      placeholder="REF-001"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Categoría</label>
+                    <input 
+                      type="text"
+                      value={editingProduct.category}
+                      onChange={e => setEditingProduct({...editingProduct, category: e.target.value})}
+                      className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                      placeholder="Ej. Software"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Precio de Venta Sugerido</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-gray-400">$</span>
+                    <input 
+                      type="number" required
+                      value={editingProduct.unitPrice}
+                      onChange={e => setEditingProduct({...editingProduct, unitPrice: parseFloat(e.target.value)})}
+                      className="w-full p-4 pl-8 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-black text-xl text-blue-600"
+                    />
+                  </div>
+                </div>
               </div>
-              <div className="flex space-x-3 pt-4">
-                <button 
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-3 text-gray-500 font-bold hover:bg-gray-50 rounded-xl transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  type="submit"
-                  className="flex-1 py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all"
-                >
-                  Guardar
-                </button>
-              </div>
+
+              <button 
+                type="submit"
+                className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95"
+              >
+                Guardar en Catálogo
+              </button>
             </form>
           </div>
         </div>

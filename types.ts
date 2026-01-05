@@ -26,12 +26,17 @@ export interface Client {
   email: string;
   taxId: string;
   address: string;
+  city: string;
+  municipality: string;
+  zipCode: string;
 }
 
 export interface Product {
   id: string;
   description: string;
   unitPrice: number;
+  category?: string;
+  sku?: string;
 }
 
 export interface LineItem {
@@ -81,10 +86,12 @@ export interface AppSettings {
   logo?: string;
 }
 
-export interface DashboardStats {
-  totalInvoiced: number;
-  totalPending: number;
-  quotesAccepted: number;
-  activeClients: number;
-  totalExpenses: number;
+export interface BackupData {
+  documents: Document[];
+  expenses: Expense[];
+  clients: Client[];
+  products: Product[];
+  settings: AppSettings;
+  version: string;
+  exportDate: string;
 }

@@ -84,19 +84,21 @@ export const exportToPDF = (doc: Document, client: Client | undefined, settings:
     settings.companyAddress
   ], 15, 72);
 
-  // Cliente
+  // Cliente con Ubicación Extendida
   pdf.setFont('helvetica', 'bold');
   pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
   pdf.text('PARA:', 80, 65);
   pdf.setTextColor(40, 40, 40);
   pdf.setFont('helvetica', 'normal');
   if (client) {
-    pdf.text([
+    const clientLines = [
       client.name,
       `NIT/CC: ${client.taxId}`,
+      `${client.city}, ${client.municipality} CP: ${client.zipCode}`,
       client.address,
       client.email
-    ], 80, 72);
+    ];
+    pdf.text(clientLines, 80, 72);
   } else {
     pdf.text('Cliente No Especificado', 80, 72);
   }
@@ -111,7 +113,7 @@ export const exportToPDF = (doc: Document, client: Client | undefined, settings:
   ]);
 
   (pdf as any).autoTable({
-    startY: 95,
+    startY: 100,
     head: tableHeaders,
     body: tableData,
     theme: 'striped',

@@ -6,10 +6,9 @@ import { User } from '../types';
 interface LayoutProps {
   children: React.ReactNode;
   user: User;
-  onLogout: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
+const Layout: React.FC<LayoutProps> = ({ children, user }) => {
   const navItems = [
     { path: '/', label: 'Panel', icon: '📊' },
     { path: '/invoices', label: 'Facturas', icon: '🧾' },
@@ -55,17 +54,10 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
         </nav>
 
         <div className="mt-auto pt-6 border-t border-slate-800">
-          <div className="bg-slate-800/50 p-4 rounded-2xl mb-4">
-            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Usuario Activo</p>
+          <div className="bg-slate-800/50 p-4 rounded-2xl">
+            <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Usuario</p>
             <p className="text-sm text-slate-200 font-bold truncate">{user.name}</p>
           </div>
-          <button 
-            onClick={onLogout}
-            className="w-full p-4 rounded-2xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all font-bold text-left flex items-center space-x-3"
-          >
-            <span>🚪</span>
-            <span>Cerrar Sesión</span>
-          </button>
         </div>
       </aside>
 
@@ -75,13 +67,9 @@ const Layout: React.FC<LayoutProps> = ({ children, user, onLogout }) => {
           <h1 className="text-xl font-black tracking-tighter text-blue-600 leading-none">FacturaPro</h1>
           <p className="text-[9px] text-gray-400 font-bold tracking-tight">by tecnocamaras</p>
         </div>
-        <button 
-          onClick={onLogout}
-          className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-sm"
-          title="Cerrar Sesión"
-        >
-          👋
-        </button>
+        <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-bold text-xs">
+          {user.name.charAt(0)}
+        </div>
       </header>
 
       {/* Main Content Area */}

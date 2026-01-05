@@ -1,17 +1,18 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+const getAi = () => {
+  const apiKey = (typeof process !== 'undefined' && process.env?.API_KEY) || '';
+  return new GoogleGenAI({ apiKey });
+};
 
 export const generateProfessionalDescription = async (basicText: string): Promise<string> => {
   try {
+    const ai = getAi();
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Convierte esta descripción básica de un servicio en una descripción profesional, detallada y persuasiva para una factura o presupuesto en español: "${basicText}". Responde solo con el texto mejorado, sin introducciones ni comillas.`,
-      config: {
-        temperature: 0.7,
-        maxOutputTokens: 200,
-      }
+      contents: `Convierte esta descripción básica de un servicio en una descripción profesional para factura en español: "${basicText}". Solo el texto mejorado.`,
+      config: { temperature: 0.7, maxOutputTokens: 200 }
     });
     return response.text?.trim() || basicText;
   } catch (error) {
@@ -20,28 +21,51 @@ export const generateProfessionalDescription = async (basicText: string): Promis
   }
 };
 
-export const suggestInvoiceNotes = async (type: string, amount: number, currency: string = 'COP'): Promise<string> => {
+export const optimizeProductListing = async (name: string): Promise<{description: string, suggestedPrice: number, category: string}> => {
   try {
+    const ai = getAi();
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Escribe un breve texto de agradecimiento y condiciones de pago profesionales para una ${type} por valor de ${amount} ${currency}. Incluye que el pago se debe realizar antes de la fecha de vencimiento y menciona métodos comunes de pago. Idioma: Español. Responde solo con el texto de las notas.`,
+      contents: `Optimiza este producto: "${name}". Responde en JSON con description, suggestedPrice (number) y category.`,
       config: {
-        temperature: 0.5,
-        maxOutputTokens: 250,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            description: { type: Type.STRING },
+            suggestedPrice: { type: Type.NUMBER },
+            category: { type: Type.STRING }
+          },
+          required: ["description", "suggestedPrice", "category"]
+        }
       }
+    });
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    return { description: name, suggestedPrice: 0, category: "General" };
+  }
+};
+
+export const suggestInvoiceNotes = async (type: string, amount: number, currency: string = 'COP'): Promise<string> => {
+  try {
+    const ai = getAi();
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Escribe notas de agradecimiento y pago para una ${type} de ${amount} ${currency}.`,
+      config: { temperature: 0.5, maxOutputTokens: 200 }
     });
     return response.text?.trim() || "";
   } catch (error) {
-    console.error("Gemini Error:", error);
     return "";
   }
 };
 
 export const generateDraftItems = async (projectDesc: string): Promise<{description: string, quantity: number, unitPrice: number}[]> => {
   try {
+    const ai = getAi();
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Genera una lista de 3 a 5 ítems de servicios/productos profesionales para un proyecto de: "${projectDesc}". Para cada ítem, proporciona una descripción profesional, una cantidad lógica y un precio unitario sugerido (en términos generales). Responde estrictamente en formato JSON.`,
+      contents: `Genera 3 items de servicios para: "${projectDesc}". Responde en JSON ARRAY con description, quantity, unitPrice.`,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -58,10 +82,36 @@ export const generateDraftItems = async (projectDesc: string): Promise<{descript
         }
       }
     });
-    
     return JSON.parse(response.text || "[]");
   } catch (error) {
-    console.error("Gemini Drafting Error:", error);
     return [];
+  }
+};
+
+export const generateWelcomeEmail = async (userName: string, companyName: string): Promise<string> => {
+  try {
+    const ai = getAi();
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Email de bienvenida para ${userName} de la empresa ${companyName}.`,
+      config: { temperature: 0.8, maxOutputTokens: 300 }
+    });
+    return response.text?.trim() || `Bienvenido, ${userName}.`;
+  } catch (error) {
+    return "Bienvenido a FacturaPro.";
+  }
+};
+
+export const generateRecoveryEmail = async (userName: string, passwordHint: string): Promise<string> => {
+  try {
+    const ai = getAi();
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: `Email de recuperación para ${userName}. Contraseña: ${passwordHint}.`,
+      config: { temperature: 0.4, maxOutputTokens: 200 }
+    });
+    return response.text?.trim() || `Tu contraseña es: ${passwordHint}`;
+  } catch (error) {
+    return `Tu contraseña es: ${passwordHint}`;
   }
 };
