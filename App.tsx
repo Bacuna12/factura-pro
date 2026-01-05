@@ -1,16 +1,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
-import Layout from './components/Layout.tsx';
-import Dashboard from './components/Dashboard.tsx';
-import DocumentList from './components/DocumentList.tsx';
-import DocumentEditor from './components/DocumentEditor.tsx';
-import ClientManager from './components/ClientManager.tsx';
-import ProductManager from './components/ProductManager.tsx';
-import ExpenseManager from './components/ExpenseManager.tsx';
-import Settings from './components/Settings.tsx';
-import { database } from './services/databaseService.ts';
-import { Document, Client, Product, DocumentType, AppSettings, Expense, User, BackupData } from './types.ts';
+import Layout from './components/Layout';
+import Dashboard from './components/Dashboard';
+import DocumentList from './components/DocumentList';
+import DocumentEditor from './components/DocumentEditor';
+import ClientManager from './components/ClientManager';
+import ProductManager from './components/ProductManager';
+import ExpenseManager from './components/ExpenseManager';
+import Settings from './components/Settings';
+import { database } from './services/databaseService';
+import { Document, Client, Product, DocumentType, AppSettings, Expense, User, BackupData } from './types';
 
 const DEFAULT_USER: User = {
   id: 'admin-id',
