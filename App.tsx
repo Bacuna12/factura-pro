@@ -80,12 +80,19 @@ const App: React.FC = () => {
       <Layout user={user}>
         <Routes>
           <Route path="/" element={<Dashboard documents={documents} expenses={expenses} clientsCount={clients.length} settings={settings} />} />
+          
           <Route path="/invoices" element={<DocumentList type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
-          <Route path="/invoices/new" element={<DocumentEditor type={DocumentType.INVOICE} clients={clients} products={products} onSave={handleSaveDocument} settings={settings} />} />
-          <Route path="/invoices/edit/:id" element={<EditDocumentWrapper type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onSave={handleSaveDocument} />} />
+          <Route path="/invoices/new" element={<DocumentEditor type={DocumentType.INVOICE} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
+          <Route path="/invoices/edit/:id" element={<EditDocumentWrapper type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} />} />
+          
+          <Route path="/collections" element={<DocumentList type={DocumentType.ACCOUNT_COLLECTION} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
+          <Route path="/collections/new" element={<DocumentEditor type={DocumentType.ACCOUNT_COLLECTION} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
+          <Route path="/collections/edit/:id" element={<EditDocumentWrapper type={DocumentType.ACCOUNT_COLLECTION} documents={documents} clients={clients} products={products} settings={settings} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} />} />
+
           <Route path="/quotes" element={<DocumentList type={DocumentType.QUOTE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
-          <Route path="/quotes/new" element={<DocumentEditor type={DocumentType.QUOTE} clients={clients} products={products} onSave={handleSaveDocument} settings={settings} />} />
-          <Route path="/quotes/edit/:id" element={<EditDocumentWrapper type={DocumentType.QUOTE} documents={documents} clients={clients} products={products} settings={settings} onSave={handleSaveDocument} />} />
+          <Route path="/quotes/new" element={<DocumentEditor type={DocumentType.QUOTE} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
+          <Route path="/quotes/edit/:id" element={<EditDocumentWrapper type={DocumentType.QUOTE} documents={documents} clients={clients} products={products} settings={settings} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} />} />
+          
           <Route path="/expenses" element={<ExpenseManager expenses={expenses} onUpdateExpenses={handleUpdateExpenses} settings={settings} />} />
           <Route path="/products" element={<ProductManager products={products} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
           <Route path="/clients" element={<ClientManager clients={clients} onUpdateClients={handleUpdateClients} />} />
@@ -98,12 +105,12 @@ const App: React.FC = () => {
 };
 
 const EditDocumentWrapper: React.FC<{ 
-  type: DocumentType, documents: Document[], clients: Client[], products: Product[], settings: AppSettings, onSave: (doc: Document) => void 
-}> = ({ type, documents, clients, products, settings, onSave }) => {
+  type: DocumentType, documents: Document[], clients: Client[], products: Product[], settings: AppSettings, onSave: (doc: Document) => void, onUpdateClients: (clients: Client[]) => void, onUpdateProducts: (products: Product[]) => void 
+}> = ({ type, documents, clients, products, settings, onSave, onUpdateClients, onUpdateProducts }) => {
   const { id } = useParams<{ id: string }>();
   const initialData = documents.find(d => d.id === id);
-  if (!initialData) return <Navigate to={type === DocumentType.INVOICE ? '/invoices' : '/quotes'} />;
-  return <DocumentEditor type={type} clients={clients} products={products} onSave={onSave} settings={settings} initialData={initialData} />;
+  if (!initialData) return <Navigate to={type === DocumentType.INVOICE ? '/invoices' : type === DocumentType.ACCOUNT_COLLECTION ? '/collections' : '/quotes'} />;
+  return <DocumentEditor type={type} clients={clients} products={products} onSave={onSave} onUpdateClients={onUpdateClients} onUpdateProducts={onUpdateProducts} settings={settings} initialData={initialData} />;
 };
 
 export default App;

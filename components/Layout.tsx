@@ -12,6 +12,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
   const navItems = [
     { path: '/', label: 'Panel', icon: '📊' },
     { path: '/invoices', label: 'Facturas', icon: '🧾' },
+    { path: '/collections', label: 'Cuentas Cobro', icon: '📝' },
     { path: '/quotes', label: 'Presupuestos', icon: '📄' },
     { path: '/expenses', label: 'Gastos', icon: '💸' },
     { path: '/products', label: 'Catálogo', icon: '📦' },
@@ -21,7 +22,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-[#F8FAFC]">
-      {/* Sidebar Desktop (Premium Look) */}
+      {/* Sidebar Desktop */}
       <aside className="hidden md:flex flex-col w-72 bg-slate-900 text-white min-h-screen p-8 no-print sticky top-0">
         <div className="mb-12">
           <div className="flex items-center space-x-3 mb-2">
@@ -61,7 +62,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
         </div>
       </aside>
 
-      {/* Mobile Top Header (Minimal) */}
+      {/* Mobile Top Header */}
       <header className="md:hidden bg-white text-gray-900 p-5 flex justify-between items-center shadow-sm z-50 sticky top-0 no-print">
         <div>
           <h1 className="text-xl font-black tracking-tighter text-blue-600 leading-none">FacturaPro</h1>
@@ -79,7 +80,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
         </div>
       </main>
 
-      {/* Mobile Bottom Navigation (APK style) */}
+      {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-6 left-5 right-5 bg-slate-900/95 backdrop-blur-xl text-white rounded-[32px] flex justify-around items-center p-3 no-print shadow-2xl z-[100] border border-white/10">
         {navItems.map((item) => (
           <NavLink

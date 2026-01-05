@@ -22,12 +22,13 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
     return (doc.payments || []).reduce((acc, p) => acc + p.amount, 0);
   };
 
-  const invoices = documents.filter(d => d.type === DocumentType.INVOICE);
-  const totalInvoiced = invoices.reduce((acc, i) => acc + calculatePaidAmount(i), 0);
+  // Se consideran Ingresos tanto Facturas como Cuentas de Cobro
+  const revenueDocs = documents.filter(d => d.type === DocumentType.INVOICE || d.type === DocumentType.ACCOUNT_COLLECTION);
+  const totalInvoiced = revenueDocs.reduce((acc, i) => acc + calculatePaidAmount(i), 0);
   const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
   const netProfit = totalInvoiced - totalExpenses;
 
-  const pendingAmount = invoices
+  const pendingAmount = revenueDocs
     .filter(i => i.status !== DocumentStatus.PAID && i.status !== DocumentStatus.REJECTED)
     .reduce((acc, i) => acc + (calculateTotal(i) - calculatePaidAmount(i)), 0);
 
@@ -107,7 +108,10 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {documents.slice(0, 6).map(doc => (
-                  <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => navigate(doc.type === DocumentType.INVOICE ? `/invoices/edit/${doc.id}` : `/quotes/edit/${doc.id}`)}>
+                  <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => {
+                    const base = doc.type === DocumentType.INVOICE ? '/invoices' : doc.type === DocumentType.ACCOUNT_COLLECTION ? '/collections' : '/quotes';
+                    navigate(`${base}/edit/${doc.id}`);
+                  }}>
                     <td className="px-6 py-4">
                       <p className="font-bold text-gray-800">#{doc.number}</p>
                       <p className="text-xs text-gray-400 capitalize">{doc.type.toLowerCase()}</p>

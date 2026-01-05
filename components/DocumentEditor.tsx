@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Document, 
@@ -17,31 +17,46 @@ interface DocumentEditorProps {
   clients: Client[];
   products: Product[];
   onSave: (doc: Document) => void;
+  onUpdateClients: (clients: Client[]) => void;
+  onUpdateProducts: (products: Product[]) => void;
   settings: AppSettings;
   initialData?: Document;
 }
 
-const DocumentEditor: React.FC<DocumentEditorProps> = ({ type, clients, products, onSave, settings, initialData }) => {
+const DocumentEditor: React.FC<DocumentEditorProps> = ({ 
+  type, clients, products, onSave, onUpdateClients, onUpdateProducts, settings, initialData 
+}) => {
   const navigate = useNavigate();
+  const isCollection = type === DocumentType.ACCOUNT_COLLECTION;
   
   const [doc, setDoc] = useState<Document>(initialData || {
     id: Math.random().toString(36).substr(2, 9),
     type,
-    number: `${type === DocumentType.INVOICE ? 'FAC' : 'PRE'}-${Math.floor(Math.random() * 10000)}`,
+    number: `${type === DocumentType.INVOICE ? 'FAC' : isCollection ? 'CC' : 'PRE'}-${Math.floor(Math.random() * 10000)}`,
     date: new Date().toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     clientId: clients[0]?.id || '',
     items: [{ id: '1', description: '', quantity: 1, unitPrice: 0 }],
     status: DocumentStatus.DRAFT,
-    notes: '',
-    taxRate: settings.defaultTaxRate,
+    notes: isCollection ? `Certifico que NO soy responsable de IVA. Favor consignar a la cuenta [Tipo] número [Número] del banco [Nombre].` : '',
+    taxRate: isCollection ? 0 : settings.defaultTaxRate,
+    withholdingRate: 0,
     logo: settings.logo
   });
 
   const [aiLoading, setAiLoading] = useState<string | null>(null);
-  const [draftPrompt, setDraftPrompt] = useState('');
   
-  // Estados para el selector de productos
+  // Estados para creación rápida
+  const [isQuickClientOpen, setIsQuickClientOpen] = useState(false);
+  const [isQuickProductOpen, setIsQuickProductOpen] = useState(false);
+  const [quickClient, setQuickClient] = useState<Client>({
+    id: '', name: '', email: '', taxId: '', address: '', city: '', municipality: '', zipCode: ''
+  });
+  const [quickProduct, setQuickProduct] = useState<Product>({
+    id: '', description: '', unitPrice: 0, category: 'General', sku: ''
+  });
+
+  // Estados para selector de productos
   const [isProductSelectorOpen, setIsProductSelectorOpen] = useState(false);
   const [activeItemSelectorId, setActiveItemSelectorId] = useState<string | null>(null);
   const [productSearchTerm, setProductSearchTerm] = useState('');
@@ -79,12 +94,9 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({ type, clients, products
     const newItems = doc.items.map(item => {
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
-        // Autocompletar precio si coincide exactamente con un producto
         if (field === 'description') {
           const matchedProduct = products.find(p => p.description.toLowerCase() === value.toLowerCase());
-          if (matchedProduct) {
-            updatedItem.unitPrice = matchedProduct.unitPrice;
-          }
+          if (matchedProduct) updatedItem.unitPrice = matchedProduct.unitPrice;
         }
         return updatedItem;
       }
@@ -93,24 +105,50 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({ type, clients, products
     setDoc({ ...doc, items: newItems });
   };
 
+  // Crear Cliente Rápido
+  const handleQuickClientSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newId = Math.random().toString(36).substr(2, 9);
+    const newClient = { ...quickClient, id: newId };
+    onUpdateClients([newClient, ...clients]);
+    setDoc({ ...doc, clientId: newId });
+    setIsQuickClientOpen(false);
+    setQuickClient({ id: '', name: '', email: '', taxId: '', address: '', city: '', municipality: '', zipCode: '' });
+  };
+
+  // Crear Producto Rápido
+  const handleQuickProductSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    const newId = Math.random().toString(36).substr(2, 9);
+    const newProduct = { ...quickProduct, id: newId, sku: `PROD-${Math.floor(1000 + Math.random() * 9000)}` };
+    onUpdateProducts([newProduct, ...products]);
+    
+    // Si hay un item activo en el editor, asignarle este nuevo producto
+    if (activeItemSelectorId) {
+      const newItems = doc.items.map(item => {
+        if (item.id === activeItemSelectorId) {
+          return { ...item, description: newProduct.description, unitPrice: newProduct.unitPrice };
+        }
+        return item;
+      });
+      setDoc({ ...doc, items: newItems });
+    }
+    
+    setIsQuickProductOpen(false);
+    setIsProductSelectorOpen(false);
+    setQuickProduct({ id: '', description: '', unitPrice: 0, category: 'General', sku: '' });
+  };
+
   const handleSelectProductFromCatalog = (product: Product) => {
     if (!activeItemSelectorId) return;
-    
     const newItems = doc.items.map(item => {
       if (item.id === activeItemSelectorId) {
-        return {
-          ...item,
-          description: product.description,
-          unitPrice: product.unitPrice
-        };
+        return { ...item, description: product.description, unitPrice: product.unitPrice };
       }
       return item;
     });
-    
     setDoc({ ...doc, items: newItems });
     setIsProductSelectorOpen(false);
-    setActiveItemSelectorId(null);
-    setProductSearchTerm('');
   };
 
   const openCatalogFor = (itemId: string) => {
@@ -118,295 +156,260 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({ type, clients, products
     setIsProductSelectorOpen(true);
   };
 
-  const handleImproveDescription = async (itemId: string, text: string) => {
-    if (!text) return;
-    setAiLoading(itemId);
-    const improved = await generateProfessionalDescription(text);
-    updateItem(itemId, 'description', improved);
-    setAiLoading(null);
-  };
-
-  const handleDraftContent = async () => {
-    if (!draftPrompt) return;
-    setAiLoading('drafting');
-    const items = await generateDraftItems(draftPrompt);
-    if (items && items.length > 0) {
-      const newItems: LineItem[] = items.map(item => ({
-        id: Math.random().toString(36).substr(2, 9),
-        description: item.description,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice
-      }));
-      if (doc.items.length === 1 && !doc.items[0].description) {
-        setDoc({ ...doc, items: newItems });
-      } else {
-        setDoc({ ...doc, items: [...doc.items, ...newItems] });
-      }
-      setDraftPrompt('');
-    }
-    setAiLoading(null);
-  };
-
   const subtotal = doc.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
   const tax = subtotal * (doc.taxRate / 100);
-  const total = subtotal + tax;
+  const grossTotal = subtotal + tax;
+  const withholding = grossTotal * ((doc.withholdingRate || 0) / 100);
+  const netTotal = grossTotal - withholding;
 
   const handleSuggestNotes = async () => {
     setAiLoading('notes');
-    const notes = await suggestInvoiceNotes(doc.type, total, settings.currency);
-    setDoc({ ...doc, notes });
+    const notes = await suggestInvoiceNotes(doc.type, netTotal, settings.currency);
+    setDoc({ ...doc, notes: isCollection ? `${doc.notes}\n\n${notes}` : notes });
     setAiLoading(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave(doc);
-    navigate(type === DocumentType.INVOICE ? '/invoices' : '/quotes');
+    navigate(type === DocumentType.INVOICE ? '/invoices' : isCollection ? '/collections' : '/quotes');
   };
-
-  const filteredProducts = products.filter(p => 
-    p.description.toLowerCase().includes(productSearchTerm.toLowerCase())
-  );
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 animate-fadeIn pb-10">
-      <datalist id="products-list">
-        {products.map(p => (
-          <option key={p.id} value={p.description} />
-        ))}
-      </datalist>
-
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">
-            {initialData ? 'Editar' : 'Crear'} {type === DocumentType.INVOICE ? 'Factura' : 'Presupuesto'}
+            {initialData ? 'Editar' : 'Crear'} {type}
           </h2>
-          <p className="text-gray-500 font-medium">#{doc.number}</p>
+          <p className={`text-sm font-bold ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>
+            Documento No. {doc.number}
+          </p>
         </div>
-        <button 
-          type="button" 
-          onClick={() => navigate(-1)}
-          className="w-12 h-12 flex items-center justify-center bg-gray-100 text-gray-500 rounded-2xl hover:bg-gray-200 transition-colors"
-        >
-          ✕
-        </button>
+        <button type="button" onClick={() => navigate(-1)} className="w-12 h-12 flex items-center justify-center bg-white border border-gray-100 text-gray-400 rounded-2xl hover:bg-gray-50 transition-colors shadow-sm">✕</button>
       </div>
 
-      {!initialData && (
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 rounded-[32px] text-white shadow-xl shadow-blue-200 relative overflow-hidden group">
-          <div className="relative z-10">
-            <div className="flex items-center space-x-3 mb-2">
-              <span className="text-2xl">✨</span>
-              <h3 className="font-bold text-xl">Borrador con IA</h3>
-            </div>
-            <p className="text-blue-100 mb-6 text-sm">Describe tu trabajo y la IA creará los ítems por ti.</p>
-            <div className="flex gap-2">
-              <input 
-                type="text"
-                value={draftPrompt}
-                onChange={(e) => setDraftPrompt(e.target.value)}
-                placeholder="Ej: Mantenimiento de aire acondicionado..."
-                className="flex-1 p-4 rounded-2xl border-none bg-white/20 backdrop-blur-md text-white placeholder-blue-200 outline-none focus:bg-white/30 transition-all text-sm"
-              />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100 space-y-6">
+            <div className="flex justify-between items-center">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Información Principal</p>
               <button 
-                type="button"
-                onClick={handleDraftContent}
-                disabled={aiLoading === 'drafting' || !draftPrompt}
-                className="px-6 bg-white text-blue-600 font-black rounded-2xl hover:bg-blue-50 transition-all shadow-lg active:scale-95 disabled:opacity-50"
+                type="button" 
+                onClick={() => setIsQuickClientOpen(true)}
+                className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl hover:bg-blue-100"
               >
-                {aiLoading === 'drafting' ? '...' : 'Generar'}
+                + Crear Cliente Rápido
               </button>
             </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="md:col-span-2">
+                <label className="block text-xs font-black text-gray-500 uppercase mb-2">Cliente Receptor</label>
+                <select 
+                  value={doc.clientId}
+                  onChange={(e) => setDoc({ ...doc, clientId: e.target.value })}
+                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  <option value="">Selecciona un cliente</option>
+                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-black text-gray-500 uppercase mb-2">Fecha de Emisión</label>
+                <input type="date" value={doc.date} onChange={(e) => setDoc({ ...doc, date: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" required />
+              </div>
+              <div>
+                <label className="block text-xs font-black text-gray-500 uppercase mb-2">Fecha de Vencimiento</label>
+                <input type="date" value={doc.dueDate} onChange={(e) => setDoc({ ...doc, dueDate: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" required />
+              </div>
+            </div>
           </div>
-          <div className="absolute -right-4 -bottom-4 opacity-10 text-9xl">⚡</div>
+
+          <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100 space-y-6">
+            <div className="flex justify-between items-center">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Conceptos Cobrados</p>
+              <button type="button" onClick={handleAddItem} className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl hover:bg-blue-100 transition-colors">+ Añadir Ítem</button>
+            </div>
+            
+            <div className="space-y-4">
+              {doc.items.map((item) => (
+                <div key={item.id} className="p-4 border border-gray-50 rounded-2xl bg-gray-50/30 flex flex-col md:flex-row gap-4 items-end">
+                  <div className="flex-1 w-full">
+                    <div className="flex justify-between mb-1">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Descripción</label>
+                      <button type="button" onClick={() => openCatalogFor(item.id)} className="text-[9px] font-bold text-indigo-600 underline">Catálogo / Nuevo</button>
+                    </div>
+                    <input 
+                      type="text"
+                      value={item.description}
+                      onChange={(e) => updateItem(item.id, 'description', e.target.value)}
+                      className="w-full p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none"
+                      placeholder="Nombre del servicio..."
+                    />
+                  </div>
+                  <div className="w-full md:w-24">
+                    <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Cant.</label>
+                    <input type="number" value={item.quantity} onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value))} className="w-full p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none text-center" />
+                  </div>
+                  <div className="w-full md:w-32">
+                    <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">P. Unitario</label>
+                    <input type="number" value={item.unitPrice} onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value))} className="w-full p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none text-right" />
+                  </div>
+                  <button type="button" onClick={() => handleRemoveItem(item.id)} className="p-3 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">🗑️</button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100 space-y-4">
+             <div className="flex justify-between items-center">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Observaciones y Notas Legales</p>
+              <button type="button" onClick={handleSuggestNotes} className="text-[10px] font-black text-blue-600">🪄 Asistente IA</button>
+            </div>
+            <textarea 
+              value={doc.notes}
+              onChange={(e) => setDoc({ ...doc, notes: e.target.value })}
+              className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium outline-none min-h-[120px]"
+              placeholder="Escribe notas adicionales o instrucciones de pago..."
+            />
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className={`p-8 rounded-[40px] shadow-xl text-white ${isCollection ? 'bg-violet-600 shadow-violet-200' : 'bg-slate-900 shadow-slate-200'} sticky top-10 transition-colors`}>
+            <h3 className="text-xl font-black mb-8 border-b border-white/10 pb-4">Resumen Financiero</h3>
+            
+            <div className="space-y-4">
+              <div className="flex justify-between text-white/60 font-bold text-sm">
+                <span>Bruto (Sin imp)</span>
+                <span>{formatCurrency(subtotal)}</span>
+              </div>
+              
+              {!isCollection && (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-white/60 font-bold text-sm">
+                    <span>IVA ({doc.taxRate}%)</span>
+                    <span>{formatCurrency(tax)}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3 border-t border-white/10 pt-4">
+                <div className="flex justify-between text-white/60 font-bold text-sm">
+                  <span>Retención ({doc.withholdingRate}%)</span>
+                  <span className="text-rose-300">-{formatCurrency(withholding)}</span>
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-white/10 space-y-1">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Total Neto a Cobrar</span>
+                  <span className="text-3xl font-black">{formatCurrency(netTotal)}</span>
+                </div>
+              </div>
+            </div>
+
+            <button type="submit" className="w-full mt-10 py-5 bg-white text-gray-900 rounded-[24px] font-black shadow-lg hover:bg-gray-50 transition-all active:scale-95 uppercase tracking-widest text-xs">
+              Guardar {type}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* MODAL: Selector de Catálogo + Opción Crear Nuevo */}
+      {isProductSelectorOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[150] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden animate-slideUp">
+            <div className="p-6 border-b border-gray-50 flex justify-between items-center bg-indigo-600 text-white">
+              <h3 className="font-black text-xl">Mi Catálogo</h3>
+              <button onClick={() => setIsProductSelectorOpen(false)} className="text-2xl">✕</button>
+            </div>
+            <div className="p-4 bg-gray-50 border-b border-gray-100">
+               <button 
+                type="button" 
+                onClick={() => { setIsQuickProductOpen(true); }}
+                className="w-full p-4 bg-white border border-dashed border-indigo-200 text-indigo-600 font-black rounded-2xl hover:bg-indigo-50 transition-all mb-4"
+              >
+                ✨ Crear Nuevo Producto Rápido
+              </button>
+              <input 
+                type="text" 
+                placeholder="Buscar en catálogo..."
+                value={productSearchTerm}
+                onChange={(e) => setProductSearchTerm(e.target.value)}
+                className="w-full p-4 rounded-2xl border border-gray-100 outline-none font-bold text-sm"
+              />
+            </div>
+            <div className="p-4 max-h-80 overflow-y-auto space-y-2">
+              {products.filter(p => p.description.toLowerCase().includes(productSearchTerm.toLowerCase())).map(p => (
+                <button 
+                  key={p.id} 
+                  type="button" 
+                  onClick={() => handleSelectProductFromCatalog(p)}
+                  className="w-full p-4 text-left hover:bg-indigo-50 rounded-2xl border border-gray-100 transition-colors flex justify-between items-center group"
+                >
+                  <span className="font-bold group-hover:text-indigo-700">{p.description}</span>
+                  <span className="text-blue-600 font-black">{formatCurrency(p.unitPrice)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-8 rounded-[32px] shadow-sm border border-gray-100">
-        <div className="space-y-6">
-          <div>
-            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Cliente</label>
-            <select 
-              value={doc.clientId}
-              onChange={(e) => setDoc({ ...doc, clientId: e.target.value })}
-              className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
-              required
-            >
-              <option value="">Selecciona un cliente</option>
-              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Número</label>
-              <input type="text" value={doc.number} onChange={(e) => setDoc({ ...doc, number: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" required />
+      {/* MODAL: Creación Rápida Cliente */}
+      {isQuickClientOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[40px] w-full max-w-lg overflow-hidden shadow-2xl animate-fadeIn">
+            <div className="p-8 bg-blue-600 text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-2xl font-black">Nuevo Cliente</h3>
+                <p className="text-blue-100 text-sm">Registro express</p>
+              </div>
+              <button onClick={() => setIsQuickClientOpen(false)} className="text-2xl">✕</button>
             </div>
-            <div>
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Estado</label>
-              <select value={doc.status} onChange={(e) => setDoc({ ...doc, status: e.target.value as DocumentStatus })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none">
-                {Object.values(DocumentStatus).map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
-          </div>
-        </div>
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Fecha</label>
-              <input type="date" value={doc.date} onChange={(e) => setDoc({ ...doc, date: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" required />
-            </div>
-            <div>
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Vencimiento</label>
-              <input type="date" value={doc.dueDate} onChange={(e) => setDoc({ ...doc, dueDate: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" required />
-            </div>
-          </div>
-          <div>
-            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Impuesto (%)</label>
-            <input type="number" value={doc.taxRate} onChange={(e) => setDoc({ ...doc, taxRate: parseFloat(e.target.value) })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" required />
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-black text-gray-900 tracking-tight">Líneas de Detalle</h3>
-        </div>
-        <div className="space-y-4">
-          {doc.items.map((item) => (
-            <div key={item.id} className="p-6 border border-gray-100 rounded-3xl bg-gray-50/50 space-y-4 relative group">
-              <div className="flex flex-col lg:flex-row gap-4">
-                <div className="flex-1">
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Descripción</label>
-                    <div className="flex space-x-3">
-                      <button 
-                        type="button" 
-                        onClick={() => openCatalogFor(item.id)}
-                        className="text-[10px] font-black text-indigo-600 hover:text-indigo-800 flex items-center space-x-1 bg-indigo-50 px-2 py-1 rounded-lg"
-                      >
-                        <span>📦 Ver Catálogo</span>
-                      </button>
-                      <button 
-                        type="button" 
-                        onClick={() => handleImproveDescription(item.id, item.description)} 
-                        disabled={aiLoading === item.id || !item.description} 
-                        className="text-[10px] font-black text-blue-600 hover:text-blue-800 disabled:opacity-30 flex items-center space-x-1 bg-blue-50 px-2 py-1 rounded-lg"
-                      >
-                        <span>✨ Mejora IA</span>
-                      </button>
-                    </div>
-                  </div>
-                  <input 
-                    list="products-list"
-                    value={item.description}
-                    onChange={(e) => updateItem(item.id, 'description', e.target.value)}
-                    className="w-full p-4 bg-white border border-gray-100 rounded-2xl font-bold outline-none shadow-sm text-sm"
-                    placeholder="Escribe el nombre del servicio o producto..."
-                  />
+            <form onSubmit={handleQuickClientSave} className="p-8 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="text-[10px] font-black uppercase text-gray-400">Nombre / Empresa</label>
+                  <input required value={quickClient.name} onChange={e => setQuickClient({...quickClient, name: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
                 </div>
-                <div className="flex flex-row gap-4">
-                  <div className="w-24">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">Cant.</label>
-                    <input type="number" value={item.quantity} onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value))} className="w-full p-4 bg-white border border-gray-100 rounded-2xl font-bold outline-none shadow-sm text-center" />
-                  </div>
-                  <div className="w-32">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">Precio Unit.</label>
-                    <input type="number" value={item.unitPrice} onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value))} className="w-full p-4 bg-white border border-gray-100 rounded-2xl font-bold outline-none shadow-sm text-center" />
-                  </div>
-                  <div className="flex items-end">
-                    <button 
-                      type="button" 
-                      onClick={() => handleRemoveItem(item.id)} 
-                      className="w-12 h-12 flex items-center justify-center bg-rose-50 text-rose-600 rounded-2xl hover:bg-rose-100 transition-colors"
-                    >
-                      🗑️
-                    </button>
-                  </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400">Identificación (NIT/CC)</label>
+                  <input required value={quickClient.taxId} onChange={e => setQuickClient({...quickClient, taxId: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400">Email</label>
+                  <input type="email" required value={quickClient.email} onChange={e => setQuickClient({...quickClient, email: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-        <button type="button" onClick={handleAddItem} className="mt-6 p-5 border-2 border-dashed border-gray-200 rounded-3xl w-full text-gray-400 font-bold hover:border-blue-400 hover:text-blue-600 transition-all active:scale-[0.99]">
-          + Añadir nuevo concepto
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div className="md:col-span-2 bg-white p-8 rounded-[32px] shadow-sm border border-gray-100">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-black text-gray-900 tracking-tight">Notas y Condiciones</h3>
-            <button type="button" onClick={handleSuggestNotes} disabled={aiLoading === 'notes'} className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl hover:bg-blue-100">
-              {aiLoading === 'notes' ? 'Redactando...' : '🪄 Redactar con IA'}
-            </button>
+              <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-[24px] font-black shadow-xl shadow-blue-100 mt-4">Guardar y Seleccionar</button>
+            </form>
           </div>
-          <textarea value={doc.notes} onChange={(e) => setDoc({ ...doc, notes: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none font-medium text-sm" rows={6} placeholder="Instrucciones de pago, agradecimientos..." />
         </div>
-        <div className="bg-slate-900 text-white p-8 rounded-[32px] shadow-2xl shadow-gray-400 flex flex-col justify-between">
-          <div className="space-y-4">
-            <h3 className="text-lg font-black border-b border-white/10 pb-4">Resumen</h3>
-            <div className="flex justify-between text-slate-400 font-medium"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-            <div className="flex justify-between text-slate-400 font-medium"><span>Impuestos ({doc.taxRate}%)</span><span>{formatCurrency(tax)}</span></div>
-            <div className="flex justify-between text-2xl font-black text-blue-400 pt-6 border-t border-white/10"><span>TOTAL</span><span>{formatCurrency(total)}</span></div>
-          </div>
-          <button type="submit" className="w-full mt-8 py-5 bg-blue-600 hover:bg-blue-500 text-white rounded-[24px] font-black transition-all shadow-lg shadow-blue-900/40 active:scale-95">
-            Guardar {type === DocumentType.INVOICE ? 'Factura' : 'Presupuesto'}
-          </button>
-        </div>
-      </div>
+      )}
 
-      {/* MODAL: Selector de Catálogo de Productos */}
-      {isProductSelectorOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[110] flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white rounded-t-[40px] sm:rounded-[40px] shadow-2xl w-full max-w-lg overflow-hidden animate-slideUp">
-            <div className="bg-indigo-600 p-8 text-white">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-2xl font-black">Mi Catálogo</h3>
-                <button onClick={() => setIsProductSelectorOpen(false)} className="text-white/60 hover:text-white text-3xl">✕</button>
-              </div>
-              <div className="relative">
-                <input 
-                  type="text" 
-                  value={productSearchTerm}
-                  onChange={(e) => setProductSearchTerm(e.target.value)}
-                  placeholder="Buscar por nombre..."
-                  className="w-full p-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl outline-none text-white placeholder-white/50 font-bold"
-                  autoFocus
-                />
-                <span className="absolute right-4 top-4">🔍</span>
-              </div>
+      {/* MODAL: Creación Rápida Producto */}
+      {isQuickProductOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[250] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="p-8 bg-indigo-600 text-white flex justify-between items-center">
+              <h3 className="text-2xl font-black">Nuevo Producto</h3>
+              <button onClick={() => setIsQuickProductOpen(false)} className="text-2xl">✕</button>
             </div>
-            
-            <div className="p-4 max-h-[60vh] overflow-y-auto">
-              <div className="grid grid-cols-1 gap-3">
-                {filteredProducts.map(p => (
-                  <button 
-                    key={p.id}
-                    type="button"
-                    onClick={() => handleSelectProductFromCatalog(p)}
-                    className="flex justify-between items-center p-5 bg-gray-50 hover:bg-indigo-50 border border-gray-100 hover:border-indigo-100 rounded-3xl transition-all group text-left"
-                  >
-                    <div className="flex-1 mr-4">
-                      <p className="font-black text-gray-900 group-hover:text-indigo-700 transition-colors">{p.description}</p>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mt-1">Precio sugerido</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-black text-indigo-600">{formatCurrency(p.unitPrice)}</p>
-                      <span className="text-[10px] font-black text-indigo-400 group-hover:bg-indigo-600 group-hover:text-white px-2 py-1 rounded-lg transition-all uppercase">Seleccionar</span>
-                    </div>
-                  </button>
-                ))}
-                
-                {filteredProducts.length === 0 && (
-                  <div className="py-20 text-center">
-                    <p className="text-gray-400 font-bold">No se encontraron productos en el catálogo</p>
-                  </div>
-                )}
+            <form onSubmit={handleQuickProductSave} className="p-8 space-y-4">
+              <div>
+                <label className="text-[10px] font-black uppercase text-gray-400">Nombre del Producto/Servicio</label>
+                <input required value={quickProduct.description} onChange={e => setQuickProduct({...quickProduct, description: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
               </div>
-            </div>
-            <div className="p-8 bg-gray-50 text-center">
-              <p className="text-xs text-gray-400 font-medium">Los productos se guardan automáticamente cuando creas una factura con un concepto nuevo.</p>
-            </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-gray-400">Precio Unitario</label>
+                <input type="number" required value={quickProduct.unitPrice} onChange={e => setQuickProduct({...quickProduct, unitPrice: parseFloat(e.target.value)})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-black text-indigo-600 text-xl" />
+              </div>
+              <button type="submit" className="w-full py-5 bg-indigo-600 text-white rounded-[24px] font-black shadow-xl shadow-indigo-100 mt-4">Crear y Añadir</button>
+            </form>
           </div>
         </div>
       )}

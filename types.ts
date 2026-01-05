@@ -1,7 +1,8 @@
 
 export enum DocumentType {
   INVOICE = 'FACTURA',
-  QUOTE = 'PRESUPUESTO'
+  QUOTE = 'PRESUPUESTO',
+  ACCOUNT_COLLECTION = 'CUENTA DE COBRO'
 }
 
 export enum DocumentStatus {
@@ -73,6 +74,7 @@ export interface Document {
   status: DocumentStatus;
   notes: string;
   taxRate: number;
+  withholdingRate?: number; // Nuevo campo para retenciones
   logo?: string;
   payments?: Payment[];
 }
