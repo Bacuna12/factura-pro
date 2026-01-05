@@ -38,7 +38,8 @@ export interface Product {
   unitPrice: number;
   category?: string;
   sku?: string;
-  barcode?: string; // Campo para código de barras
+  barcode?: string;
+  stock?: number; // Gestión de existencias
 }
 
 export interface LineItem {

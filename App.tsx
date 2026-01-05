@@ -62,6 +62,24 @@ const App: React.FC = () => {
   const handleImportData = (data: BackupData) => database.restoreDatabase(data);
 
   const handleSaveDocument = (doc: Document) => {
+    // Verificar si es un documento nuevo para deducir stock
+    const isNew = !documents.find(d => d.id === doc.id);
+    
+    if (isNew && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION)) {
+      setProducts(currentProducts => {
+        return currentProducts.map(p => {
+          const matchedItem = doc.items.find(item => 
+            item.description.toLowerCase() === p.description.toLowerCase() || 
+            (p.barcode && item.description === p.barcode)
+          );
+          if (matchedItem) {
+            return { ...p, stock: (p.stock || 0) - matchedItem.quantity };
+          }
+          return p;
+        });
+      });
+    }
+
     setDocuments(prev => {
       const exists = prev.find(d => d.id === doc.id);
       if (exists) return prev.map(d => d.id === doc.id ? doc : d);
