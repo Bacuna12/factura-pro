@@ -11,6 +11,7 @@ import {
   Product
 } from '../types';
 import { generateProfessionalDescription, suggestInvoiceNotes, generateDraftItems } from '../services/geminiService';
+import BarcodeScanner from './BarcodeScanner';
 
 interface DocumentEditorProps {
   type: DocumentType;
@@ -47,11 +48,17 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   const [aiLoading, setAiLoading] = useState<string | null>(null);
   const [isQuickClientOpen, setIsQuickClientOpen] = useState(false);
   const [isQuickProductOpen, setIsQuickProductOpen] = useState(false);
+  
+  // Estado para el escáner
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannerTarget, setScannerTarget] = useState<'ITEM' | 'QUICK_PRODUCT'>('ITEM');
+  const [activeScannerItemId, setActiveScannerItemId] = useState<string | null>(null);
+
   const [quickClient, setQuickClient] = useState<Client>({
     id: '', name: '', email: '', taxId: '', address: '', city: '', municipality: '', zipCode: ''
   });
   const [quickProduct, setQuickProduct] = useState<Product>({
-    id: '', description: '', unitPrice: 0, category: 'General', sku: ''
+    id: '', description: '', unitPrice: 0, category: 'General', sku: '', barcode: ''
   });
 
   const [isProductSelectorOpen, setIsProductSelectorOpen] = useState(false);
@@ -92,7 +99,11 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
         if (field === 'description') {
-          const matchedProduct = products.find(p => p.description.toLowerCase() === value.toLowerCase());
+          const lowerValue = value.toLowerCase();
+          const matchedProduct = products.find(p => 
+            p.description.toLowerCase() === lowerValue || 
+            (p.barcode && p.barcode.toLowerCase() === lowerValue)
+          );
           if (matchedProduct) updatedItem.unitPrice = matchedProduct.unitPrice;
         }
         return updatedItem;
@@ -102,12 +113,34 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     setDoc({ ...doc, items: newItems });
   };
 
+  const handleScanResult = (code: string) => {
+    if (scannerTarget === 'ITEM' && activeScannerItemId) {
+      // Buscar en catálogo
+      const matched = products.find(p => p.barcode === code);
+      if (matched) {
+        updateItem(activeScannerItemId, 'description', matched.description);
+        updateItem(activeScannerItemId, 'unitPrice', matched.unitPrice);
+      } else {
+        updateItem(activeScannerItemId, 'description', code); // Poner el código si no existe
+      }
+    } else if (scannerTarget === 'QUICK_PRODUCT') {
+      setQuickProduct({ ...quickProduct, barcode: code });
+    }
+    setIsScannerOpen(false);
+  };
+
+  const startScanning = (target: 'ITEM' | 'QUICK_PRODUCT', itemId?: string) => {
+    setScannerTarget(target);
+    setActiveScannerItemId(itemId || null);
+    setIsScannerOpen(true);
+  };
+
   const handleQuickClientSave = (e: React.FormEvent) => {
     e.preventDefault();
     const newId = Math.random().toString(36).substr(2, 9);
     const newClient = { ...quickClient, id: newId };
     onUpdateClients([newClient, ...clients]);
-    setDoc({ ...doc, clientId: newId });
+    setDoc(prev => ({ ...prev, clientId: newId }));
     setIsQuickClientOpen(false);
     setQuickClient({ id: '', name: '', email: '', taxId: '', address: '', city: '', municipality: '', zipCode: '' });
   };
@@ -128,7 +161,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     }
     setIsQuickProductOpen(false);
     setIsProductSelectorOpen(false);
-    setQuickProduct({ id: '', description: '', unitPrice: 0, category: 'General', sku: '' });
+    setQuickProduct({ id: '', description: '', unitPrice: 0, category: 'General', sku: '', barcode: '' });
   };
 
   const handleSelectProductFromCatalog = (product: Product) => {
@@ -164,169 +197,178 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave(doc);
-    // Redirección explícita basada en el tipo del documento actual
     if (type === DocumentType.INVOICE) navigate('/invoices');
     else if (type === DocumentType.ACCOUNT_COLLECTION) navigate('/collections');
     else navigate('/quotes');
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 animate-fadeIn pb-10">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-3xl font-black text-gray-900 tracking-tight">
-            {initialData ? 'Editar' : 'Crear'} {type}
-          </h2>
-          <p className={`text-sm font-bold ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>
-            Documento No. {doc.number}
-          </p>
+    <>
+      {isScannerOpen && <BarcodeScanner onScan={handleScanResult} onClose={() => setIsScannerOpen(false)} />}
+      
+      <form onSubmit={handleSubmit} className="space-y-6 animate-fadeIn pb-10">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h2 className="text-3xl font-black text-gray-900 tracking-tight">
+              {initialData ? 'Editar' : 'Crear'} {type}
+            </h2>
+            <p className={`text-sm font-bold ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>
+              Documento No. {doc.number}
+            </p>
+          </div>
+          <button type="button" onClick={() => navigate(-1)} className="w-12 h-12 flex items-center justify-center bg-white border border-gray-100 text-gray-400 rounded-2xl hover:bg-gray-50 transition-colors shadow-sm">✕</button>
         </div>
-        <button type="button" onClick={() => navigate(-1)} className="w-12 h-12 flex items-center justify-center bg-white border border-gray-100 text-gray-400 rounded-2xl hover:bg-gray-50 transition-colors shadow-sm">✕</button>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100 space-y-6">
-            <div className="flex justify-between items-center">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Información Principal</p>
-              <button 
-                type="button" 
-                onClick={() => setIsQuickClientOpen(true)}
-                className={`text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors ${
-                  isCollection ? 'text-violet-600 bg-violet-50 hover:bg-violet-100' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
-                }`}
-              >
-                + Crear Cliente Rápido
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="md:col-span-2">
-                <label className="block text-xs font-black text-gray-500 uppercase mb-2">Cliente Receptor</label>
-                <select 
-                  value={doc.clientId}
-                  onChange={(e) => setDoc({ ...doc, clientId: e.target.value })}
-                  className={`w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 ${isCollection ? 'focus:ring-violet-500' : 'focus:ring-blue-500'}`}
-                  required
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100 space-y-6">
+              <div className="flex justify-between items-center">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Información Principal</p>
+                <button 
+                  type="button" 
+                  onClick={() => setIsQuickClientOpen(true)}
+                  className={`text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors ${
+                    isCollection ? 'text-violet-600 bg-violet-50 hover:bg-violet-100' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+                  }`}
                 >
-                  <option value="">Selecciona un cliente</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-2">Fecha de Emisión</label>
-                <input type="date" value={doc.date} onChange={(e) => setDoc({ ...doc, date: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" required />
-              </div>
-              <div>
-                <label className="block text-xs font-black text-gray-500 uppercase mb-2">Fecha de Vencimiento</label>
-                <input type="date" value={doc.dueDate} onChange={(e) => setDoc({ ...doc, dueDate: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" required />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100 space-y-6">
-            <div className="flex justify-between items-center">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Conceptos Cobrados</p>
-              <button 
-                type="button" 
-                onClick={handleAddItem} 
-                className={`text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors ${
-                  isCollection ? 'text-violet-600 bg-violet-50 hover:bg-violet-100' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
-                }`}
-              >
-                + Añadir Ítem
-              </button>
-            </div>
-            
-            <div className="space-y-4">
-              {doc.items.map((item) => (
-                <div key={item.id} className="p-4 border border-gray-50 rounded-2xl bg-gray-50/30 flex flex-col md:flex-row gap-4 items-end">
-                  <div className="flex-1 w-full">
-                    <div className="flex justify-between mb-1">
-                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Descripción</label>
-                      <button type="button" onClick={() => openCatalogFor(item.id)} className={`text-[9px] font-bold underline ${isCollection ? 'text-violet-600' : 'text-indigo-600'}`}>Catálogo / Nuevo</button>
-                    </div>
-                    <input 
-                      type="text"
-                      value={item.description}
-                      onChange={(e) => updateItem(item.id, 'description', e.target.value)}
-                      className="w-full p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none"
-                      placeholder="Nombre del servicio..."
-                    />
-                  </div>
-                  <div className="w-full md:w-24">
-                    <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Cant.</label>
-                    <input type="number" value={item.quantity} onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value))} className="w-full p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none text-center" />
-                  </div>
-                  <div className="w-full md:w-32">
-                    <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">P. Unitario</label>
-                    <input type="number" value={item.unitPrice} onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value))} className="w-full p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none text-right" />
-                  </div>
-                  <button type="button" onClick={() => handleRemoveItem(item.id)} className="p-3 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">🗑️</button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100 space-y-4">
-             <div className="flex justify-between items-center">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Observaciones y Notas Legales</p>
-              <button type="button" onClick={handleSuggestNotes} className={`text-[10px] font-black ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>🪄 Asistente IA</button>
-            </div>
-            <textarea 
-              value={doc.notes}
-              onChange={(e) => setDoc({ ...doc, notes: e.target.value })}
-              className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium outline-none min-h-[120px]"
-              placeholder="Escribe notas adicionales o instrucciones de pago..."
-            />
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <div className={`p-8 rounded-[40px] shadow-xl text-white sticky top-10 transition-colors ${isCollection ? 'bg-violet-600 shadow-violet-200' : 'bg-slate-900 shadow-slate-200'}`}>
-            <h3 className="text-xl font-black mb-8 border-b border-white/10 pb-4">Resumen Financiero</h3>
-            
-            <div className="space-y-4">
-              <div className="flex justify-between text-white/60 font-bold text-sm">
-                <span>Bruto (Sin imp)</span>
-                <span>{formatCurrency(subtotal)}</span>
+                  + Crear Cliente Rápido
+                </button>
               </div>
               
-              {!isCollection && (
-                <div className="space-y-3">
-                  <div className="flex justify-between text-white/60 font-bold text-sm">
-                    <span>IVA ({doc.taxRate}%)</span>
-                    <span>{formatCurrency(tax)}</span>
-                  </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-black text-gray-500 uppercase mb-2">Cliente Receptor</label>
+                  <select 
+                    value={doc.clientId}
+                    onChange={(e) => setDoc({ ...doc, clientId: e.target.value })}
+                    className={`w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 ${isCollection ? 'focus:ring-violet-500' : 'focus:ring-blue-500'}`}
+                    required
+                  >
+                    <option value="">Selecciona un cliente</option>
+                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
                 </div>
-              )}
-
-              <div className="space-y-3 border-t border-white/10 pt-4">
-                <div className="flex justify-between text-white/60 font-bold text-sm">
-                  <span>Retención ({doc.withholdingRate}%)</span>
-                  <span className="text-rose-300">-{formatCurrency(withholding)}</span>
+                <div>
+                  <label className="block text-xs font-black text-gray-500 uppercase mb-2">Fecha de Emisión</label>
+                  <input type="date" value={doc.date} onChange={(e) => setDoc({ ...doc, date: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" required />
                 </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-[9px] font-black uppercase text-white/40">Ajustar % Retención:</label>
-                  <input type="number" value={doc.withholdingRate} onChange={e => setDoc({...doc, withholdingRate: parseFloat(e.target.value)})} className="bg-white/10 border-none rounded-lg w-12 text-[10px] p-1 text-center font-bold" />
-                </div>
-              </div>
-
-              <div className="pt-6 border-t border-white/10 space-y-1">
-                <div className="flex justify-between items-baseline">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Total Neto a Cobrar</span>
-                  <span className="text-3xl font-black">{formatCurrency(netTotal)}</span>
+                <div>
+                  <label className="block text-xs font-black text-gray-500 uppercase mb-2">Fecha de Vencimiento</label>
+                  <input type="date" value={doc.dueDate} onChange={(e) => setDoc({ ...doc, dueDate: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" required />
                 </div>
               </div>
             </div>
 
-            <button type="submit" className="w-full mt-10 py-5 bg-white text-gray-900 rounded-[24px] font-black shadow-lg hover:bg-gray-50 transition-all active:scale-95 uppercase tracking-widest text-xs">
-              Guardar {type}
-            </button>
+            <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100 space-y-6">
+              <div className="flex justify-between items-center">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Conceptos Cobrados</p>
+                <button 
+                  type="button" 
+                  onClick={handleAddItem} 
+                  className={`text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors ${
+                    isCollection ? 'text-violet-600 bg-violet-50 hover:bg-violet-100' : 'text-blue-600 bg-blue-50 hover:bg-blue-100'
+                  }`}
+                >
+                  + Añadir Ítem
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                {doc.items.map((item) => (
+                  <div key={item.id} className="p-4 border border-gray-50 rounded-2xl bg-gray-50/30 flex flex-col md:flex-row gap-4 items-end">
+                    <div className="flex-1 w-full">
+                      <div className="flex justify-between mb-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Descripción / Código</label>
+                        <button type="button" onClick={() => openCatalogFor(item.id)} className={`text-[9px] font-bold underline ${isCollection ? 'text-violet-600' : 'text-indigo-600'}`}>Catálogo / Nuevo</button>
+                      </div>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text"
+                          value={item.description}
+                          onChange={(e) => updateItem(item.id, 'description', e.target.value)}
+                          className="flex-1 p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none"
+                          placeholder="Nombre o escanea..."
+                        />
+                        <button 
+                          type="button" 
+                          onClick={() => startScanning('ITEM', item.id)}
+                          className="w-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-lg hover:bg-blue-100"
+                        >
+                          📷
+                        </button>
+                      </div>
+                    </div>
+                    <div className="w-full md:w-24">
+                      <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Cant.</label>
+                      <input type="number" value={item.quantity} onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value))} className="w-full p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none text-center" />
+                    </div>
+                    <div className="w-full md:w-32">
+                      <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">P. Unitario</label>
+                      <input type="number" value={item.unitPrice} onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value))} className="w-full p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none text-right" />
+                    </div>
+                    <button type="button" onClick={() => handleRemoveItem(item.id)} className="p-3 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">🗑️</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100 space-y-4">
+               <div className="flex justify-between items-center">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Observaciones y Notas Legales</p>
+                <button type="button" onClick={handleSuggestNotes} className={`text-[10px] font-black ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>🪄 Asistente IA</button>
+              </div>
+              <textarea 
+                value={doc.notes}
+                onChange={(e) => setDoc({ ...doc, notes: e.target.value })}
+                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-sm font-medium outline-none min-h-[120px]"
+                placeholder="Escribe notas adicionales o instrucciones de pago..."
+              />
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className={`p-8 rounded-[40px] shadow-xl text-white sticky top-10 transition-colors ${isCollection ? 'bg-violet-600 shadow-violet-200' : 'bg-slate-900 shadow-slate-200'}`}>
+              <h3 className="text-xl font-black mb-8 border-b border-white/10 pb-4">Resumen Financiero</h3>
+              
+              <div className="space-y-4">
+                <div className="flex justify-between text-white/60 font-bold text-sm">
+                  <span>Bruto (Sin imp)</span>
+                  <span>{formatCurrency(subtotal)}</span>
+                </div>
+                
+                {!isCollection && (
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-white/60 font-bold text-sm">
+                      <span>IVA ({doc.taxRate}%)</span>
+                      <span>{formatCurrency(tax)}</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-3 border-t border-white/10 pt-4">
+                  <div className="flex justify-between text-white/60 font-bold text-sm">
+                    <span>Retención ({doc.withholdingRate}%)</span>
+                    <span className="text-rose-300">-{formatCurrency(withholding)}</span>
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-white/10 space-y-1">
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Total Neto a Cobrar</span>
+                    <span className="text-3xl font-black">{formatCurrency(netTotal)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" className="w-full mt-10 py-5 bg-white text-gray-900 rounded-[24px] font-black shadow-lg hover:bg-gray-50 transition-all active:scale-95 uppercase tracking-widest text-xs">
+                Guardar {type}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      </form>
 
+      {/* MODALS MOVED OUTSIDE OF THE FORM TO PREVENT NESTED FORMS ISSUE */}
       {isProductSelectorOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[150] flex items-center justify-center p-4">
           <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden animate-slideUp">
@@ -346,14 +388,17 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
               </button>
               <input 
                 type="text" 
-                placeholder="Buscar en catálogo..."
+                placeholder="Busca por nombre o código..."
                 value={productSearchTerm}
                 onChange={(e) => setProductSearchTerm(e.target.value)}
                 className="w-full p-4 rounded-2xl border border-gray-100 outline-none font-bold text-sm"
               />
             </div>
             <div className="p-4 max-h-80 overflow-y-auto space-y-2">
-              {products.filter(p => p.description.toLowerCase().includes(productSearchTerm.toLowerCase())).map(p => (
+              {products.filter(p => 
+                p.description.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                (p.barcode && p.barcode.toLowerCase().includes(productSearchTerm.toLowerCase()))
+              ).map(p => (
                 <button 
                   key={p.id} 
                   type="button" 
@@ -362,7 +407,10 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                     isCollection ? 'hover:bg-violet-50' : 'hover:bg-indigo-50'
                   }`}
                 >
-                  <span className={`font-bold transition-colors ${isCollection ? 'group-hover:text-violet-700' : 'group-hover:text-indigo-700'}`}>{p.description}</span>
+                  <div>
+                    <span className={`font-bold block transition-colors ${isCollection ? 'group-hover:text-violet-700' : 'group-hover:text-indigo-700'}`}>{p.description}</span>
+                    {p.barcode && <span className="text-[10px] text-slate-400 font-bold tracking-tight">🏷️ {p.barcode}</span>}
+                  </div>
                   <span className={`font-black ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>{formatCurrency(p.unitPrice)}</span>
                 </button>
               ))}
@@ -415,6 +463,24 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                 <input required value={quickProduct.description} onChange={e => setQuickProduct({...quickProduct, description: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
               </div>
               <div>
+                <label className="text-[10px] font-black uppercase text-gray-400">Código de Barras</label>
+                <div className="flex gap-2">
+                  <input 
+                    value={quickProduct.barcode || ''} 
+                    onChange={e => setQuickProduct({...quickProduct, barcode: e.target.value})} 
+                    className="flex-1 p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" 
+                    placeholder="Escribe o escanea..." 
+                  />
+                  <button 
+                    type="button" 
+                    onClick={() => startScanning('QUICK_PRODUCT')}
+                    className={`w-14 rounded-2xl flex items-center justify-center text-xl transition-colors ${isCollection ? 'bg-violet-100 text-violet-600 hover:bg-violet-200' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}
+                  >
+                    📷
+                  </button>
+                </div>
+              </div>
+              <div>
                 <label className="text-[10px] font-black uppercase text-gray-400">Precio Unitario</label>
                 <input type="number" required value={quickProduct.unitPrice} onChange={e => setQuickProduct({...quickProduct, unitPrice: parseFloat(e.target.value)})} className={`w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-black text-xl ${isCollection ? 'text-violet-600' : 'text-indigo-600'}`} />
               </div>
@@ -423,7 +489,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
           </div>
         </div>
       )}
-    </form>
+    </>
   );
 };
 

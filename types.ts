@@ -38,6 +38,7 @@ export interface Product {
   unitPrice: number;
   category?: string;
   sku?: string;
+  barcode?: string; // Campo para código de barras
 }
 
 export interface LineItem {
@@ -74,7 +75,7 @@ export interface Document {
   status: DocumentStatus;
   notes: string;
   taxRate: number;
-  withholdingRate?: number; // Nuevo campo para retenciones
+  withholdingRate?: number;
   logo?: string;
   payments?: Payment[];
 }

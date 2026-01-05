@@ -1,5 +1,7 @@
 {
   "name": "FacturaPro - Gestor de Facturas y Presupuestos",
   "description": "Una aplicación profesional para gestionar facturas, presupuestos y clientes con asistencia de IA para descripciones de servicios.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera"
+  ]
 }
