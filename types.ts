@@ -1,0 +1,90 @@
+
+export enum DocumentType {
+  INVOICE = 'FACTURA',
+  QUOTE = 'PRESUPUESTO'
+}
+
+export enum DocumentStatus {
+  DRAFT = 'Borrador',
+  SENT = 'Enviado',
+  PARTIAL = 'Parcial',
+  PAID = 'Pagado',
+  ACCEPTED = 'Aceptado',
+  REJECTED = 'Rechazado'
+}
+
+export interface User {
+  id: string;
+  username: string;
+  password?: string;
+  name: string;
+}
+
+export interface Client {
+  id: string;
+  name: string;
+  email: string;
+  taxId: string;
+  address: string;
+}
+
+export interface Product {
+  id: string;
+  description: string;
+  unitPrice: number;
+}
+
+export interface LineItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface Payment {
+  id: string;
+  date: string;
+  amount: number;
+  method: string;
+  note?: string;
+}
+
+export interface Expense {
+  id: string;
+  date: string;
+  description: string;
+  amount: number;
+  category: string;
+}
+
+export interface Document {
+  id: string;
+  type: DocumentType;
+  number: string;
+  date: string;
+  dueDate: string;
+  clientId: string;
+  items: LineItem[];
+  status: DocumentStatus;
+  notes: string;
+  taxRate: number;
+  logo?: string;
+  payments?: Payment[];
+}
+
+export interface AppSettings {
+  currency: string;
+  companyName: string;
+  companyId: string;
+  companyAddress: string;
+  defaultTaxRate: number;
+  logo?: string;
+}
+
+export interface DashboardStats {
+  totalInvoiced: number;
+  totalPending: number;
+  quotesAccepted: number;
+  activeClients: number;
+  totalExpenses: number;
+}

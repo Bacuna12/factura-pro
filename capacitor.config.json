@@ -1,0 +1,10 @@
+
+{
+  "appId": "com.facturapro.app",
+  "appName": "FacturaPro",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}
