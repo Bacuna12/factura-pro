@@ -74,8 +74,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-5 md:p-10 lg:p-14 overflow-x-hidden">
-        <div className="max-w-6xl mx-auto pb-24 md:pb-0">
+      <main className="flex-1 p-4 md:p-10 lg:p-14">
+        <div className="max-w-6xl mx-auto pb-32 md:pb-10">
           {children}
         </div>
       </main>
