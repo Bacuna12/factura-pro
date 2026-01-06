@@ -42,7 +42,6 @@ const INITIAL_SETTINGS: AppSettings = {
 const App: React.FC = () => {
   const [user] = useState<User>(DEFAULT_USER);
   
-  // Estados inicializados directamente desde localStorage para máxima velocidad
   const [documents, setDocuments] = useState<Document[]>(() => {
     const saved = localStorage.getItem('facturapro_docs');
     return saved ? JSON.parse(saved) : [];
@@ -58,7 +57,6 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
   });
 
-  // Efectos de persistencia (Salvaguarda secundaria)
   useEffect(() => { localStorage.setItem('facturapro_docs', JSON.stringify(documents)); }, [documents]);
   useEffect(() => { localStorage.setItem('facturapro_expenses', JSON.stringify(expenses)); }, [expenses]);
   useEffect(() => { localStorage.setItem('facturapro_clients', JSON.stringify(clients)); }, [clients]);
@@ -68,9 +66,6 @@ const App: React.FC = () => {
   const handleImportData = (data: BackupData) => database.restoreDatabase(data);
 
   const handleSaveDocument = useCallback((doc: Document) => {
-    console.log("Guardando documento:", doc.number);
-    
-    // 1. Actualizar documentos
     setDocuments(prevDocs => {
       const existingIndex = prevDocs.findIndex(d => d.id === doc.id);
       let updatedDocs;
@@ -80,36 +75,56 @@ const App: React.FC = () => {
         updatedDocs[existingIndex] = doc;
       } else {
         updatedDocs = [doc, ...prevDocs];
+        
+        if (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) {
+          setProducts(prevProducts => {
+            const updatedProducts = prevProducts.map(p => {
+              const matchedItem = doc.items.find(item => 
+                item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
+                (p.barcode && item.description === p.barcode)
+              );
+              return matchedItem ? { ...p, stock: (p.stock || 0) - matchedItem.quantity } : p;
+            });
+            localStorage.setItem('facturapro_products', JSON.stringify(updatedProducts));
+            return updatedProducts;
+          });
+        }
       }
       
-      // Persistencia forzada inmediata
       localStorage.setItem('facturapro_docs', JSON.stringify(updatedDocs));
       return updatedDocs;
     });
-
-    // 2. Lógica de stock fuera del actualizador de documentos para evitar advertencias de React
-    const isNew = !documents.some(d => d.id === doc.id);
-    if (isNew && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION)) {
-      setProducts(prevProducts => {
-        const updatedProducts = prevProducts.map(p => {
-          const matchedItem = doc.items.find(item => 
-            item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
-            (p.barcode && item.description === p.barcode)
-          );
-          return matchedItem ? { ...p, stock: (p.stock || 0) - matchedItem.quantity } : p;
-        });
-        localStorage.setItem('facturapro_products', JSON.stringify(updatedProducts));
-        return updatedProducts;
-      });
-    }
   }, [documents]);
 
   const handleDeleteDocument = (id: string) => {
-    setDocuments(prev => {
-      const updated = prev.filter(d => d.id !== id);
-      localStorage.setItem('facturapro_docs', JSON.stringify(updated));
-      return updated;
-    });
+    // Buscar el documento antes de eliminarlo para saber qué productos reintegrar
+    const docToDelete = documents.find(d => d.id === id);
+    
+    if (docToDelete) {
+      // Solo devolvemos al stock si el documento era una factura o cuenta de cobro (que descuentan stock)
+      if (docToDelete.type === DocumentType.INVOICE || docToDelete.type === DocumentType.ACCOUNT_COLLECTION) {
+        setProducts(prevProducts => {
+          const updatedProducts = prevProducts.map(p => {
+            // Buscamos si el producto del catálogo estaba en la factura
+            const matchedItem = docToDelete.items.find(item => 
+              item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
+              (p.barcode && item.description === p.barcode)
+            );
+            // Si estaba, sumamos la cantidad de vuelta al stock
+            return matchedItem ? { ...p, stock: (p.stock || 0) + matchedItem.quantity } : p;
+          });
+          localStorage.setItem('facturapro_products', JSON.stringify(updatedProducts));
+          return updatedProducts;
+        });
+      }
+
+      // Eliminar el documento de la lista
+      setDocuments(prev => {
+        const updated = prev.filter(d => d.id !== id);
+        localStorage.setItem('facturapro_docs', JSON.stringify(updated));
+        return updated;
+      });
+    }
   };
 
   const handleUpdateClients = (newClients: Client[]) => setClients(newClients);
