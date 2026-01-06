@@ -21,11 +21,17 @@ export enum PdfTemplate {
   COMPACT_TICKET = 'COMPACT_TICKET'
 }
 
+export enum UserRole {
+  ADMIN = 'ADMINISTRADOR',
+  SELLER = 'VENDEDOR'
+}
+
 export interface User {
   id: string;
   username: string;
   password?: string;
   name: string;
+  role: UserRole;
 }
 
 export interface Client {

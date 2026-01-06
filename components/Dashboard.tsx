@@ -1,11 +1,12 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Document, DocumentType, DocumentStatus, AppSettings, Expense, Client, Payment } from '../types';
+import { Document, DocumentType, DocumentStatus, AppSettings, Expense, Client, Payment, User, UserRole } from '../types';
 import { exportToPDF } from '../services/pdfService';
 import ConfirmModal from './ConfirmModal';
 
 interface DashboardProps {
+  user: User;
   documents: Document[];
   expenses: Expense[];
   clientsCount: number;
@@ -15,7 +16,7 @@ interface DashboardProps {
   clients: Client[];
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount, settings, onDeleteDoc, onUpdateDoc, clients }) => {
+const Dashboard: React.FC<DashboardProps> = ({ user, documents, expenses, clientsCount, settings, onDeleteDoc, onUpdateDoc, clients }) => {
   const navigate = useNavigate();
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
   
@@ -23,6 +24,8 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
   const [activeDocForPayment, setActiveDocForPayment] = useState<Document | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<string>('0');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
+
+  const isAdmin = user.role === UserRole.ADMIN;
 
   const calculateTotal = (doc: Document) => {
     const subtotal = doc.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
@@ -98,7 +101,7 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-fadeIn">
       <ConfirmModal 
         isOpen={!!docToDelete}
         title="Eliminar Documento"
@@ -112,36 +115,21 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
 
       {isPaymentModalOpen && activeDocForPayment && (
         <div 
-          className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4"
-          style={{ zIndex: 2147483647, position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+          className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 z-[99999]"
           onClick={() => setIsPaymentModalOpen(false)}
         >
-          <div 
-            className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
+          <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="bg-emerald-600 p-8 text-white">
               <h3 className="text-2xl font-black">Cobrar Documento</h3>
               <p className="text-emerald-100 text-xs">#{activeDocForPayment.number}</p>
             </div>
             <form onSubmit={handleRegisterPayment} className="p-8 space-y-6">
-              <div className="bg-emerald-50 p-4 rounded-2xl text-center">
-                 <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">Saldo</p>
-                 <p className="text-2xl font-black text-emerald-900">{formatCurrency(calculateTotal(activeDocForPayment) - calculatePaidAmount(activeDocForPayment))}</p>
+              <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-2xl text-center">
+                 <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase mb-1">Saldo</p>
+                 <p className="text-2xl font-black text-emerald-900 dark:text-emerald-100">{formatCurrency(calculateTotal(activeDocForPayment) - calculatePaidAmount(activeDocForPayment))}</p>
               </div>
-              <input 
-                type="number" 
-                required
-                step="any"
-                value={paymentAmount} 
-                onChange={e => setPaymentAmount(e.target.value)}
-                className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-emerald-500 font-black text-2xl text-emerald-600 outline-none"
-              />
-              <select 
-                value={paymentMethod} 
-                onChange={e => setPaymentMethod(e.target.value)}
-                className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none"
-              >
+              <input type="number" required step="any" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-slate-800 dark:text-white rounded-2xl border-2 border-transparent focus:border-emerald-500 font-black text-2xl text-emerald-600 outline-none" />
+              <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)} className="w-full p-4 bg-gray-50 dark:bg-slate-800 dark:text-white rounded-2xl font-bold outline-none">
                 <option value="Efectivo">Efectivo</option>
                 <option value="Transferencia">Transferencia</option>
                 <option value="Nequi">Nequi</option>
@@ -154,51 +142,66 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
       )}
 
       <header>
-        <h2 className="text-3xl font-black text-gray-900 tracking-tight">Panel de Control</h2>
-        <p className="text-gray-500 font-medium">Resumen financiero actual</p>
+        <h2 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight">¡Hola, {user.name.split(' ')[0]}!</h2>
+        <p className="text-gray-500 dark:text-slate-400 font-medium">{isAdmin ? 'Resumen financiero actual' : 'Panel de operaciones rápidas'}</p>
       </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Ingresos" value={formatCurrency(totalInvoiced)} icon="💰" color="bg-emerald-500" />
-        <StatCard title="Gastos" value={formatCurrency(totalExpenses)} icon="💸" color="bg-rose-500" />
-        <StatCard title="Utilidad" value={formatCurrency(netProfit)} icon="📈" color="bg-blue-500" />
-        <StatCard title="Pendiente" value={formatCurrency(pendingAmount)} icon="⏳" color="bg-amber-500" />
-      </div>
+      {isAdmin ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard title="Ingresos" value={formatCurrency(totalInvoiced)} icon="💰" color="bg-emerald-500" />
+          <StatCard title="Gastos" value={formatCurrency(totalExpenses)} icon="💸" color="bg-rose-500" />
+          <StatCard title="Utilidad" value={formatCurrency(netProfit)} icon="📈" color="bg-blue-500" />
+          <StatCard title="Pendiente" value={formatCurrency(pendingAmount)} icon="⏳" color="bg-amber-500" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <button onClick={() => navigate('/pos')} className="bg-blue-600 p-8 rounded-[40px] text-white text-left shadow-xl shadow-blue-100 dark:shadow-none hover:scale-[1.02] transition-all">
+            <span className="text-4xl block mb-4">🛒</span>
+            <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Abrir Caja</p>
+            <h3 className="text-2xl font-black">Punto de Venta</h3>
+          </button>
+          <button onClick={() => navigate('/invoices/new')} className="bg-slate-900 dark:bg-slate-800 p-8 rounded-[40px] text-white text-left shadow-xl shadow-slate-100 dark:shadow-none hover:scale-[1.02] transition-all border border-white/5">
+            <span className="text-4xl block mb-4">🧾</span>
+            <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Nueva Venta</p>
+            <h3 className="text-2xl font-black">Facturar</h3>
+          </button>
+        </div>
+      )}
 
-      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-6 border-b border-gray-50 flex justify-between items-center">
-          <h3 className="font-bold text-gray-800">Facturación Reciente</h3>
-          <button onClick={() => navigate('/invoices')} className="text-blue-600 text-xs font-black uppercase">Ver Todas</button>
+      <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden">
+        <div className="p-8 border-b border-gray-50 dark:border-slate-800 flex justify-between items-center">
+          <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tighter">Ventas Recientes</h3>
+          <button onClick={() => navigate('/invoices')} className="text-blue-600 dark:text-blue-400 text-xs font-black uppercase tracking-widest">Ver Historial</button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b">
+            <thead className="bg-gray-50 dark:bg-slate-800/50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b dark:border-slate-800">
               <tr>
-                <th className="px-6 py-4">Ref</th>
-                <th className="px-6 py-4">Total</th>
-                <th className="px-6 py-4 text-right">Acción</th>
+                <th className="px-8 py-4">Ref</th>
+                <th className="px-8 py-4">Total</th>
+                <th className="px-8 py-4 text-right">Acción</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-50 dark:divide-slate-800">
               {documents.slice(0, 5).map(doc => {
                 const total = calculateTotal(doc);
                 const paid = calculatePaidAmount(doc);
                 const isPaid = (total - paid) < 1;
-                
                 return (
-                <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4 font-bold text-gray-900">#{doc.number}</td>
-                  <td className="px-6 py-4 font-black text-gray-900">{formatCurrency(total)}</td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end space-x-1">
-                       {!isPaid && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
-                          <button onClick={() => handleOpenPayment(doc)} className="p-2 text-emerald-600 active:scale-90">💸</button>
-                       )}
-                       <button onClick={() => handleExportPDF(doc)} className="p-2 text-indigo-600">📥</button>
-                    </div>
-                  </td>
-                </tr>
-              )})}
+                  <tr key={doc.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                    <td className="px-8 py-5 font-bold text-gray-900 dark:text-slate-100">#{doc.number}</td>
+                    <td className="px-8 py-5 font-black text-gray-900 dark:text-slate-100">{formatCurrency(total)}</td>
+                    <td className="px-8 py-5 text-right">
+                      <div className="flex justify-end space-x-2">
+                        {!isPaid && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
+                          <button onClick={() => handleOpenPayment(doc)} className="p-2 text-emerald-600 dark:text-emerald-400">💸</button>
+                        )}
+                        <button onClick={() => handleExportPDF(doc)} className="p-2 text-indigo-600 dark:text-indigo-400">📥</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -208,10 +211,10 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
 };
 
 const StatCard: React.FC<{ title: string; value: string; icon: string; color: string }> = ({ title, value, icon, color }) => (
-  <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-    <div className={`w-10 h-10 rounded-xl ${color} text-white flex items-center justify-center mb-4 shadow-lg`}>{icon}</div>
-    <p className="text-[10px] text-gray-400 font-black uppercase mb-1">{title}</p>
-    <p className="text-xl font-black text-gray-900">{value}</p>
+  <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800">
+    <div className={`w-12 h-12 rounded-2xl ${color} text-white flex items-center justify-center mb-6 shadow-lg`}>{icon}</div>
+    <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mb-1">{title}</p>
+    <p className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">{value}</p>
   </div>
 );
 

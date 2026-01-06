@@ -10,14 +10,9 @@ import ProductManager from './components/ProductManager';
 import ExpenseManager from './components/ExpenseManager';
 import POS from './components/POS';
 import Settings from './components/Settings';
+import Auth from './components/Auth';
 import { database } from './services/databaseService';
-import { Document, Client, Product, DocumentType, AppSettings, Expense, User, BackupData } from './types';
-
-const DEFAULT_USER: User = {
-  id: 'admin-id',
-  username: 'admin@facturapro.com',
-  name: 'Administrador'
-};
+import { Document, Client, Product, DocumentType, AppSettings, Expense, User, BackupData, UserRole } from './types';
 
 const INITIAL_CLIENTS: Client[] = [
   { 
@@ -42,7 +37,35 @@ const INITIAL_SETTINGS: AppSettings = {
 };
 
 const App: React.FC = () => {
-  const [user] = useState<User>(DEFAULT_USER);
+  // Bypass de autenticación: Si no hay usuario, iniciamos con un perfil de administrador por defecto
+  const [user, setUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('facturapro_current_user');
+    if (saved) return JSON.parse(saved);
+    
+    // Usuario temporal para saltar la interfaz de acceso
+    return {
+      id: 'admin-default',
+      username: 'admin@facturapro.com',
+      name: 'Administrador',
+      role: UserRole.ADMIN
+    };
+  });
+
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return localStorage.getItem('facturapro_theme') === 'dark';
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('facturapro_theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('facturapro_theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
   
   const [documents, setDocuments] = useState<Document[]>(() => {
     const saved = localStorage.getItem('facturapro_docs');
@@ -65,6 +88,21 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('facturapro_products', JSON.stringify(products)); }, [products]);
   useEffect(() => { localStorage.setItem('facturapro_settings', JSON.stringify(settings)); }, [settings]);
 
+  const handleLogin = (loggedUser: User, customSettings?: AppSettings) => {
+    setUser(loggedUser);
+    localStorage.setItem('facturapro_current_user', JSON.stringify(loggedUser));
+    if (customSettings) {
+      setSettings(customSettings);
+    }
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    localStorage.removeItem('facturapro_current_user');
+    // Para el bypass, si cierra sesión recargamos para que vuelva a entrar con el admin por defecto
+    window.location.reload();
+  };
+
   const handleImportData = (data: BackupData) => database.restoreDatabase(data);
 
   const adjustStock = useCallback((items: any[], multiplier: number) => {
@@ -86,7 +124,6 @@ const App: React.FC = () => {
     setDocuments(prevDocs => {
       const existingIndex = prevDocs.findIndex(d => d.id === doc.id);
       let updatedDocs;
-      
       if (existingIndex >= 0) {
         updatedDocs = [...prevDocs];
         updatedDocs[existingIndex] = doc;
@@ -96,8 +133,6 @@ const App: React.FC = () => {
           adjustStock(doc.items, -1);
         }
       }
-      
-      localStorage.setItem('facturapro_docs', JSON.stringify(updatedDocs));
       return updatedDocs;
     });
   }, [adjustStock]);
@@ -108,11 +143,7 @@ const App: React.FC = () => {
       if (docToDelete.type === DocumentType.INVOICE || docToDelete.type === DocumentType.ACCOUNT_COLLECTION) {
         adjustStock(docToDelete.items, 1);
       }
-      setDocuments(prev => {
-        const updated = prev.filter(d => d.id !== id);
-        localStorage.setItem('facturapro_docs', JSON.stringify(updated));
-        return updated;
-      });
+      setDocuments(prev => prev.filter(d => d.id !== id));
     }
   }, [documents, adjustStock]);
 
@@ -121,30 +152,34 @@ const App: React.FC = () => {
   const handleUpdateExpenses = (newExpenses: Expense[]) => setExpenses(newExpenses);
   const handleUpdateSettings = (newSettings: AppSettings) => setSettings(newSettings);
 
+  // La condición if (!user) ha sido omitida o el usuario siempre tiene valor por defecto
+  const currentUser = user || { id: 'default', username: 'guest', name: 'Invitado', role: UserRole.ADMIN };
+
   return (
     <HashRouter>
-      <Layout user={user}>
+      <Layout user={currentUser} onLogout={handleLogout} isDarkMode={isDarkMode} onToggleDarkMode={toggleDarkMode}>
         <Routes>
-          <Route path="/" element={<Dashboard documents={documents} expenses={expenses} clientsCount={clients.length} settings={settings} onDeleteDoc={handleDeleteDocument} onUpdateDoc={handleSaveDocument} clients={clients} />} />
-          
+          <Route path="/" element={<Dashboard user={currentUser} documents={documents} expenses={expenses} clientsCount={clients.length} settings={settings} onDeleteDoc={handleDeleteDocument} onUpdateDoc={handleSaveDocument} clients={clients} />} />
           <Route path="/pos" element={<POS products={products} clients={clients} settings={settings} onSaveDocument={handleSaveDocument} onUpdateClients={handleUpdateClients} />} />
-
-          <Route path="/invoices" element={<DocumentList type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
+          <Route path="/invoices" element={<DocumentList user={currentUser} type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
           <Route path="/invoices/new" element={<DocumentEditor key="new-invoice" type={DocumentType.INVOICE} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
           <Route path="/invoices/edit/:id" element={<EditDocumentWrapper type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} onDelete={handleDeleteDocument} />} />
-          
-          <Route path="/collections" element={<DocumentList type={DocumentType.ACCOUNT_COLLECTION} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
+          <Route path="/collections" element={<DocumentList user={currentUser} type={DocumentType.ACCOUNT_COLLECTION} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
           <Route path="/collections/new" element={<DocumentEditor key="new-collection" type={DocumentType.ACCOUNT_COLLECTION} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
           <Route path="/collections/edit/:id" element={<EditDocumentWrapper type={DocumentType.ACCOUNT_COLLECTION} documents={documents} clients={clients} products={products} settings={settings} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} onDelete={handleDeleteDocument} />} />
-
-          <Route path="/quotes" element={<DocumentList type={DocumentType.QUOTE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
+          <Route path="/quotes" element={<DocumentList user={currentUser} type={DocumentType.QUOTE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
           <Route path="/quotes/new" element={<DocumentEditor key="new-quote" type={DocumentType.QUOTE} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
           <Route path="/quotes/edit/:id" element={<EditDocumentWrapper type={DocumentType.QUOTE} documents={documents} clients={clients} products={products} settings={settings} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} onDelete={handleDeleteDocument} />} />
           
-          <Route path="/expenses" element={<ExpenseManager expenses={expenses} onUpdateExpenses={handleUpdateExpenses} settings={settings} />} />
-          <Route path="/products" element={<ProductManager products={products} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
-          <Route path="/clients" element={<ClientManager clients={clients} onUpdateClients={handleUpdateClients} />} />
-          <Route path="/settings" element={<Settings settings={settings} onUpdateSettings={handleUpdateSettings} onImportData={handleImportData} allData={{ documents, expenses, clients, products, settings }} />} />
+          {currentUser.role === UserRole.ADMIN && (
+            <>
+              <Route path="/expenses" element={<ExpenseManager expenses={expenses} onUpdateExpenses={handleUpdateExpenses} settings={settings} />} />
+              <Route path="/settings" element={<Settings settings={settings} onUpdateSettings={handleUpdateSettings} onImportData={handleImportData} allData={{ documents, expenses, clients, products, settings }} />} />
+            </>
+          )}
+
+          <Route path="/products" element={<ProductManager user={currentUser} products={products} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
+          <Route path="/clients" element={<ClientManager user={currentUser} clients={clients} onUpdateClients={handleUpdateClients} />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </Layout>

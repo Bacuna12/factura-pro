@@ -1,11 +1,12 @@
 
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Document, DocumentType, DocumentStatus, Client, AppSettings, Product, Payment } from '../types';
+import { Document, DocumentType, DocumentStatus, Client, AppSettings, Product, Payment, User, UserRole } from '../types';
 import { exportToPDF, shareViaWhatsApp } from '../services/pdfService';
 import ConfirmModal from './ConfirmModal';
 
 interface DocumentListProps {
+  user: User;
   type: DocumentType;
   documents: Document[];
   clients: Client[];
@@ -17,6 +18,7 @@ interface DocumentListProps {
 }
 
 const DocumentList: React.FC<DocumentListProps> = ({ 
+  user,
   type, 
   documents, 
   clients, 
@@ -29,12 +31,13 @@ const DocumentList: React.FC<DocumentListProps> = ({
   const [statusFilter, setStatusFilter] = useState<'ALL' | DocumentStatus>('ALL');
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
   
+  const isAdmin = user.role === UserRole.ADMIN;
+
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [activeDocForPayment, setActiveDocForPayment] = useState<Document | null>(null);
   const [paymentAmountStr, setPaymentAmountStr] = useState<string>('0');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
 
-  // Estados para Modal de WhatsApp
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
   const [activeDocForWhatsApp, setActiveDocForWhatsApp] = useState<Document | null>(null);
   const [whatsappPhone, setWhatsappPhone] = useState('');
@@ -103,51 +106,29 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const total = calculateTotal(doc);
     const paid = calculatePaid(doc);
     const remaining = Math.max(0, total - paid);
-    
     setActiveDocForPayment(doc);
     setPaymentAmountStr(remaining.toFixed(0));
     setPaymentMethod(doc.paymentMethod || 'Efectivo');
-    
-    setTimeout(() => {
-      setIsPaymentModalOpen(true);
-    }, 50);
+    setTimeout(() => setIsPaymentModalOpen(true), 50);
   };
 
   const handleRegisterPayment = (e: React.FormEvent) => {
     e.preventDefault();
     const amountNum = parseFloat(paymentAmountStr);
-    
-    if (!activeDocForPayment || isNaN(amountNum) || amountNum <= 0) {
-      alert("Por favor, ingresa un monto válido.");
-      return;
-    }
-
+    if (!activeDocForPayment || isNaN(amountNum) || amountNum <= 0) return;
     const newPayment: Payment = {
       id: Math.random().toString(36).substr(2, 9),
       date: new Date().toISOString().split('T')[0],
       amount: amountNum,
       method: paymentMethod
     };
-
     const updatedPayments = [...(activeDocForPayment.payments || []), newPayment];
     const totalPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
     const docTotal = calculateTotal(activeDocForPayment);
-
     let newStatus = activeDocForPayment.status;
-    if (totalPaid >= docTotal - 1) { 
-      newStatus = DocumentStatus.PAID;
-    } else if (totalPaid > 0) {
-      newStatus = DocumentStatus.PARTIAL;
-    }
-
-    const updatedDoc: Document = {
-      ...activeDocForPayment,
-      payments: updatedPayments,
-      status: newStatus,
-      paymentMethod: paymentMethod
-    };
-
-    onUpdateDocument(updatedDoc);
+    if (totalPaid >= docTotal - 1) newStatus = DocumentStatus.PAID;
+    else if (totalPaid > 0) newStatus = DocumentStatus.PARTIAL;
+    onUpdateDocument({ ...activeDocForPayment, payments: updatedPayments, status: newStatus, paymentMethod });
     setIsPaymentModalOpen(false);
     setActiveDocForPayment(null);
   };
@@ -190,37 +171,24 @@ const DocumentList: React.FC<DocumentListProps> = ({
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">{type}S</h2>
           <p className="text-gray-500 font-medium">Historial y gestión de cobros</p>
         </div>
-        <button 
-          onClick={() => navigate(`${getRouteBase(type)}/new`)}
-          className={`w-full sm:w-auto px-6 py-4 text-white rounded-2xl font-bold shadow-lg transition-all flex items-center justify-center space-x-2 active:scale-95 ${
-            isCollection ? 'bg-violet-600 shadow-violet-100' : 'bg-blue-600 shadow-blue-100'
-          }`}
-        >
+        <button onClick={() => navigate(`${getRouteBase(type)}/new`)} className={`w-full sm:w-auto px-6 py-4 text-white rounded-2xl font-bold shadow-lg transition-all flex items-center justify-center space-x-2 active:scale-95 ${isCollection ? 'bg-violet-600 shadow-violet-100' : 'bg-blue-600 shadow-blue-100'}`}>
           <span className="text-xl font-black">+</span>
           <span className="uppercase tracking-widest text-xs">Crear {type}</span>
         </button>
       </div>
 
       <div className="bg-white p-5 rounded-[32px] shadow-sm border border-gray-100">
-        <input 
-          type="text"
-          placeholder="Buscar documento o cliente..."
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          className="w-full pl-6 pr-4 py-3 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm"
-        />
+        <input type="text" placeholder="Buscar documento o cliente..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-6 pr-4 py-3 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm" />
       </div>
 
-      {/* VISTA MÓVIL (TARJETAS) */}
       <div className="grid grid-cols-1 gap-4 md:hidden">
         {filteredDocs.map(doc => {
           const total = calculateTotal(doc);
           const paid = calculatePaid(doc);
           const balance = total - paid;
           const isPaid = balance < 1;
-          
           return (
-            <div key={doc.id} className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm space-y-4">
+            <div key={doc.id} className="bg-white p-8 rounded-[40px] border border-gray-100 shadow-sm space-y-4">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="font-black text-lg text-gray-900">#{doc.number}</p>
@@ -228,56 +196,44 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 </div>
                 <StatusBadge status={doc.status} />
               </div>
-              
               <div>
                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Cliente</p>
                 <p className="font-bold text-gray-800 truncate">{getClientName(doc.clientId)}</p>
               </div>
-
               <div className="flex justify-between items-end pt-4 border-t border-gray-50">
                 <div className="flex-1">
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</p>
                   <p className="text-xl font-black text-gray-900">{formatCurrency(total)}</p>
-                  {!isPaid && <p className="text-[10px] font-black text-emerald-600">Por Cobrar: {formatCurrency(balance)}</p>}
+                  {!isPaid && <p className="text-[10px] font-black text-emerald-600">Saldo: {formatCurrency(balance)}</p>}
                 </div>
                 <div className="flex gap-2">
                   {!isPaid && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
-                    <button 
-                      type="button"
-                      onClick={() => handleOpenPayment(doc)} 
-                      className="w-16 h-16 flex flex-col items-center justify-center bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-100 active:bg-emerald-700 active:scale-90 transition-all z-[30] relative"
-                    >
-                      <span className="text-xl">💸</span>
-                      <span className="text-[8px] font-black uppercase mt-0.5">Cobrar</span>
-                    </button>
+                    <button onClick={() => handleOpenPayment(doc)} className="w-14 h-14 bg-emerald-600 text-white rounded-2xl shadow-lg">💸</button>
                   )}
-                  <button onClick={() => handleOpenWhatsAppModal(doc)} className="w-12 h-16 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-2xl active:bg-emerald-100">
-                    <span className="text-xl">💬</span>
-                  </button>
-                  <button onClick={() => handleExportPDF(doc)} className="w-12 h-16 flex items-center justify-center bg-slate-100 text-slate-600 rounded-2xl active:bg-slate-200">📥</button>
+                  <button onClick={() => handleExportPDF(doc)} className="w-14 h-14 bg-slate-100 text-slate-600 rounded-2xl">📥</button>
                 </div>
               </div>
-              
               <div className="grid grid-cols-2 gap-2 pt-2">
-                <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="py-3 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase">Editar</button>
-                <button onClick={() => onDelete(doc.id)} className="py-3 bg-rose-50 text-rose-600 rounded-2xl font-black text-[10px] uppercase">Borrar</button>
+                <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="py-4 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase">Editar</button>
+                {isAdmin && (
+                  <button onClick={() => setDocToDelete(doc.id)} className="py-4 bg-rose-50 text-rose-600 rounded-2xl font-black text-[10px] uppercase">Borrar</button>
+                )}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* VISTA ESCRITORIO (TABLA) */}
-      <div className="hidden md:block bg-white rounded-[32px] shadow-sm border border-gray-100 overflow-hidden">
+      <div className="hidden md:block bg-white rounded-[40px] shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b">
               <tr>
-                <th className="px-6 py-4">Ref / Fecha</th>
-                <th className="px-6 py-4">Cliente</th>
-                <th className="px-6 py-4">Estado</th>
-                <th className="px-6 py-4">Total / Saldo</th>
-                <th className="px-6 py-4 text-right">Acciones</th>
+                <th className="px-8 py-5">Ref / Fecha</th>
+                <th className="px-8 py-5">Cliente</th>
+                <th className="px-8 py-5">Estado</th>
+                <th className="px-8 py-5">Total</th>
+                <th className="px-8 py-5 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -286,144 +242,54 @@ const DocumentList: React.FC<DocumentListProps> = ({
                  const paid = calculatePaid(doc);
                  const balance = total - paid;
                  const isPaid = balance < 1;
-
                  return (
-                <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors">
-                  <td className="px-6 py-4">
-                    <p className="font-bold text-gray-900">#{doc.number}</p>
-                    <p className="text-[10px] text-gray-400">{doc.date}</p>
-                  </td>
-                  <td className="px-6 py-4">
-                    <p className="text-gray-900 font-bold">{getClientName(doc.clientId)}</p>
-                  </td>
-                  <td className="px-6 py-4"><StatusBadge status={doc.status} /></td>
-                  <td className="px-6 py-4">
-                    <p className="font-black text-gray-900">{formatCurrency(total)}</p>
-                    {!isPaid && <p className="text-[9px] font-black text-emerald-600 uppercase">Faltan: {formatCurrency(balance)}</p>}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end space-x-2">
-                      {!isPaid && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
-                        <button onClick={() => handleOpenPayment(doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl" title="Registrar Cobro">💸</button>
-                      )}
-                      <button onClick={() => handleOpenWhatsAppModal(doc)} className="p-2.5 text-emerald-500 hover:bg-emerald-50 rounded-xl" title="Enviar WhatsApp">💬</button>
-                      <button onClick={() => handleExportPDF(doc)} className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl">📥</button>
-                      <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl">✏️</button>
-                      <button onClick={() => onDelete(doc.id)} className="p-2.5 text-rose-600 hover:bg-rose-50 rounded-xl">🗑️</button>
-                    </div>
-                  </td>
-                </tr>
-              )})}
+                  <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-8 py-5"><p className="font-bold text-gray-900">#{doc.number}</p><p className="text-[10px] text-gray-400">{doc.date}</p></td>
+                    <td className="px-8 py-5"><p className="text-gray-900 font-bold">{getClientName(doc.clientId)}</p></td>
+                    <td className="px-8 py-5"><StatusBadge status={doc.status} /></td>
+                    <td className="px-8 py-5"><p className="font-black text-gray-900">{formatCurrency(total)}</p></td>
+                    <td className="px-8 py-5 text-right">
+                      <div className="flex justify-end space-x-2">
+                        {!isPaid && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
+                          <button onClick={() => handleOpenPayment(doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl">💸</button>
+                        )}
+                        <button onClick={() => handleOpenWhatsAppModal(doc)} className="p-2.5 text-emerald-500 hover:bg-emerald-50 rounded-xl">💬</button>
+                        <button onClick={() => handleExportPDF(doc)} className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl">📥</button>
+                        <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl">✏️</button>
+                        {isAdmin && <button onClick={() => setDocToDelete(doc.id)} className="p-2.5 text-rose-600 hover:bg-rose-50 rounded-xl">🗑️</button>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* MODAL DE WHATSAPP (Asegurar que el número sea correcto) */}
       {isWhatsAppModalOpen && activeDocForWhatsApp && (
-        <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-xl flex items-center justify-center p-4 z-[2147483647]"
-          onClick={() => setIsWhatsAppModalOpen(false)}
-        >
-          <div 
-            className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl animate-slideUp"
-            onClick={e => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xl flex items-center justify-center p-4 z-[99999]" onClick={() => setIsWhatsAppModalOpen(false)}>
+          <div className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="bg-emerald-600 p-8 text-white text-center">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-3xl">💬</span>
-              </div>
-              <h3 className="text-xl font-black">Enviar por WhatsApp</h3>
-              <p className="text-emerald-100 text-[10px] font-black uppercase mt-1">Confirmar número de destino</p>
+              <h3 className="text-xl font-black">Enviar WhatsApp</h3>
             </div>
-            
             <form onSubmit={handleConfirmWhatsApp} className="p-8 space-y-6">
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-2">Número de Teléfono</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600 font-black">+</span>
-                  <input 
-                    type="tel"
-                    autoFocus
-                    required
-                    value={whatsappPhone} 
-                    onChange={e => setWhatsappPhone(e.target.value)}
-                    className="w-full p-4 pl-8 bg-gray-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl font-black text-lg text-emerald-900 outline-none transition-all"
-                    placeholder="573001234567"
-                  />
-                </div>
-                <p className="text-[8px] text-gray-400 px-2 font-bold uppercase italic">* Incluye código de país sin el signo + (Ej: 57 para Colombia)</p>
-              </div>
-
-              <div className="flex flex-col gap-3 pt-2">
-                <button type="submit" className="w-full py-5 bg-emerald-600 text-white rounded-3xl font-black shadow-xl shadow-emerald-200 active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2">
-                  <span>🚀</span> ABRIR WHATSAPP
-                </button>
-                <button type="button" onClick={() => setIsWhatsAppModalOpen(false)} className="w-full py-2 font-bold text-gray-400 active:text-gray-600 uppercase text-[10px] tracking-widest">Cancelar</button>
-              </div>
+              <input type="tel" required value={whatsappPhone} onChange={e => setWhatsappPhone(e.target.value)} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-black" placeholder="Ej: 573001234567" />
+              <button type="submit" className="w-full py-5 bg-emerald-600 text-white rounded-3xl font-black uppercase tracking-widest text-xs">Enviar</button>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL DE PAGO */}
       {isPaymentModalOpen && activeDocForPayment && (
-        <div 
-          className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 z-[2147483647]" 
-          onClick={() => setIsPaymentModalOpen(false)}
-        >
-          <div 
-            className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl" 
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="bg-emerald-600 p-8 text-white relative">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 z-[99999]" onClick={() => setIsPaymentModalOpen(false)}>
+          <div className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="bg-emerald-600 p-8 text-white">
               <h3 className="text-2xl font-black">Registrar Cobro</h3>
-              <p className="text-emerald-100 text-[10px] font-black uppercase mt-1">Doc No. {activeDocForPayment.number}</p>
-              <button onClick={() => setIsPaymentModalOpen(false)} className="absolute top-6 right-6 text-white/60 hover:text-white text-3xl p-2 active:scale-90 transition-all">✕</button>
             </div>
-            
             <form onSubmit={handleRegisterPayment} className="p-8 space-y-6">
-              <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 text-center">
-                 <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">Saldo por Cobrar</p>
-                 <p className="text-3xl font-black text-emerald-900">
-                    {formatCurrency(calculateTotal(activeDocForPayment) - calculatePaid(activeDocForPayment))}
-                 </p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-2">¿Cuánto recibes hoy?</label>
-                <input 
-                  type="number" 
-                  autoFocus
-                  required
-                  step="any"
-                  value={paymentAmountStr} 
-                  onChange={e => setPaymentAmountStr(e.target.value)}
-                  className="w-full p-5 bg-gray-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl font-black text-3xl text-emerald-600 outline-none transition-all"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-2">Medio de Pago</label>
-                <select 
-                  value={paymentMethod} 
-                  onChange={e => setPaymentMethod(e.target.value)}
-                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none"
-                >
-                  <option value="Efectivo">Efectivo</option>
-                  <option value="Transferencia">Transferencia Bancaria</option>
-                  <option value="Nequi">Nequi</option>
-                  <option value="Daviplata">Daviplata</option>
-                  <option value="Tarjeta">Tarjeta Débito/Crédito</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-3 pt-2">
-                <button type="submit" className="w-full py-5 bg-emerald-600 text-white rounded-3xl font-black shadow-xl shadow-emerald-200 active:scale-95 transition-all uppercase tracking-widest text-xs">
-                  Guardar Pago
-                </button>
-                <button type="button" onClick={() => setIsPaymentModalOpen(false)} className="w-full py-2 font-bold text-gray-400 active:text-gray-600">Cancelar</button>
-              </div>
+              <input type="number" required step="any" value={paymentAmountStr} onChange={e => setPaymentAmountStr(e.target.value)} className="w-full p-5 bg-gray-50 rounded-2xl font-black text-3xl text-emerald-600 outline-none" />
+              <button type="submit" className="w-full py-5 bg-emerald-600 text-white rounded-3xl font-black uppercase tracking-widest text-xs">Guardar Pago</button>
             </form>
           </div>
         </div>

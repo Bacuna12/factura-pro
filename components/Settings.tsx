@@ -1,7 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { AppSettings, BackupData, PdfTemplate } from '../types';
+import { AppSettings, BackupData, PdfTemplate, User, UserRole } from '../types';
 import { database } from '../services/databaseService';
+import ConfirmModal from './ConfirmModal';
 
 interface SettingsProps {
   settings: AppSettings;
@@ -22,19 +23,19 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
     pdfTemplate: settings.pdfTemplate || PdfTemplate.PROFESSIONAL
   });
   const [dbStats, setDbStats] = useState(database.getStats());
+  const [users, setUsers] = useState<User[]>(() => JSON.parse(localStorage.getItem('facturapro_users') || '[]'));
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [userForm, setUserForm] = useState<User>({
+    id: '', username: '', password: '', name: '', role: UserRole.SELLER
+  });
+  const [userToDelete, setUserToDelete] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setDbStats(database.getStats());
   }, [allData]);
-
-  const currencies = [
-    { code: 'COP', label: 'Peso Colombiano ($)' },
-    { code: 'USD', label: 'Dólar Estadounidense ($)' },
-    { code: 'EUR', label: 'Euro (€)' },
-    { code: 'MXN', label: 'Peso Mexicano ($)' },
-  ];
 
   const templates = [
     { id: PdfTemplate.PROFESSIONAL, name: 'Profesional', desc: 'Sólido y corporativo', icon: '🏛️' },
@@ -59,6 +60,44 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handleOpenUserModal = (u?: User) => {
+    if (u) {
+      setUserForm({ ...u });
+    } else {
+      setUserForm({
+        id: Math.random().toString(36).substr(2, 9),
+        username: '',
+        password: '',
+        name: '',
+        role: UserRole.SELLER
+      });
+    }
+    setIsUserModalOpen(true);
+  };
+
+  const handleSaveUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    const exists = users.find(u => u.id === userForm.id);
+    let newUsers;
+    if (exists) {
+      newUsers = users.map(u => u.id === userForm.id ? userForm : u);
+    } else {
+      newUsers = [userForm, ...users];
+    }
+    setUsers(newUsers);
+    localStorage.setItem('facturapro_users', JSON.stringify(newUsers));
+    setIsUserModalOpen(false);
+  };
+
+  const handleDeleteUser = () => {
+    if (userToDelete) {
+      const newUsers = users.filter(u => u.id !== userToDelete);
+      setUsers(newUsers);
+      localStorage.setItem('facturapro_users', JSON.stringify(newUsers));
+      setUserToDelete(null);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateSettings(formData);
@@ -67,6 +106,14 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
 
   return (
     <div className="space-y-8 animate-fadeIn pb-24 max-w-5xl mx-auto">
+      <ConfirmModal 
+        isOpen={!!userToDelete}
+        title="Eliminar Usuario"
+        message="¿Estás seguro de que deseas eliminar este acceso? El usuario ya no podrá iniciar sesión."
+        onConfirm={handleDeleteUser}
+        onCancel={() => setUserToDelete(null)}
+      />
+
       <header className="flex justify-between items-end">
         <div>
           <h2 className="text-4xl font-black text-slate-900 tracking-tight">AJUSTES</h2>
@@ -124,6 +171,43 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
           </div>
         </div>
 
+        {/* GESTIÓN DE USUARIOS */}
+        <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 p-8 md:p-10 space-y-6">
+          <div className="flex justify-between items-center border-b border-slate-50 pb-6">
+            <div className="flex items-center gap-4">
+              <span className="text-3xl">👥</span>
+              <h3 className="text-2xl font-black text-slate-800 tracking-tighter">Control de Accesos</h3>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => handleOpenUserModal()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100"
+            >
+              + Nuevo Usuario
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {users.map(u => (
+              <div key={u.id} className="p-5 rounded-3xl bg-slate-50 border border-slate-100 flex justify-between items-center group">
+                <div>
+                  <p className="font-black text-slate-900 leading-none">{u.name}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-wider">{u.username}</p>
+                  <span className={`inline-block mt-2 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase ${
+                    u.role === UserRole.ADMIN ? 'bg-violet-100 text-violet-600' : 'bg-blue-100 text-blue-600'
+                  }`}>
+                    {u.role}
+                  </span>
+                </div>
+                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                   <button type="button" onClick={() => handleOpenUserModal(u)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">✏️</button>
+                   <button type="button" onClick={() => setUserToDelete(u.id)} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">🗑️</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* PLANTILLAS PDF */}
         <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 p-8 md:p-10 space-y-6">
           <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
@@ -173,6 +257,48 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
           </div>
         </div>
       </form>
+
+      {/* MODAL DE USUARIO */}
+      {isUserModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[99999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl animate-slideUp">
+             <div className="bg-slate-900 p-8 text-white relative">
+                <h3 className="text-2xl font-black">{users.find(u => u.id === userForm.id) ? 'Editar Acceso' : 'Nuevo Usuario'}</h3>
+                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">Definir credenciales y permisos</p>
+                <button onClick={() => setIsUserModalOpen(false)} className="absolute top-6 right-6 text-white/50 hover:text-white text-2xl transition-all">✕</button>
+             </div>
+             
+             <form onSubmit={handleSaveUser} className="p-8 space-y-5">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Nombre Completo</label>
+                  <input required value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ej. Ana García" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Email / Usuario</label>
+                  <input required type="email" value={userForm.username} onChange={e => setUserForm({...userForm, username: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="ana@empresa.com" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Contraseña</label>
+                  <input required type="password" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Rol de Acceso</label>
+                  <select 
+                    value={userForm.role}
+                    onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}
+                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={UserRole.SELLER}>Vendedor (Solo Operación)</option>
+                    <option value={UserRole.ADMIN}>Administrador (Control Total)</option>
+                  </select>
+                </div>
+                <button type="submit" className="w-full py-5 bg-slate-900 text-white rounded-3xl font-black shadow-xl shadow-slate-100 uppercase tracking-widest text-xs active:scale-95 transition-all">
+                  Guardar Usuario
+                </button>
+             </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
