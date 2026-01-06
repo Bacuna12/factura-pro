@@ -3,7 +3,6 @@ import React, { useState, useMemo, useRef } from 'react';
 import { Product, AppSettings } from '../types';
 import { optimizeProductListing } from '../services/geminiService';
 import ConfirmModal from './ConfirmModal';
-import BarcodeScanner from './BarcodeScanner';
 
 interface ProductManagerProps {
   products: Product[];
@@ -19,8 +18,6 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
   const [activeCategory, setActiveCategory] = useState('Todas');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   const categories = useMemo(() => {
     const cats = new Set(products.map(p => p.category || 'General'));
@@ -90,13 +87,6 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
     }
   };
 
-  const handleScanResult = (code: string) => {
-    if (editingProduct) {
-      setEditingProduct({ ...editingProduct, barcode: code });
-    }
-    setIsScannerOpen(false);
-  };
-
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
@@ -116,8 +106,6 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
 
   return (
     <div className="space-y-6 animate-fadeIn pb-24 md:pb-10">
-      {isScannerOpen && <BarcodeScanner onScan={handleScanResult} onClose={() => setIsScannerOpen(false)} />}
-      
       <ConfirmModal 
         isOpen={!!productToDelete}
         title="Eliminar Producto"
@@ -323,10 +311,7 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
 
                   <div>
                     <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Código de Barras / SKU</label>
-                    <div className="flex gap-2">
-                      <input type="text" value={editingProduct.barcode || ''} onChange={e => setEditingProduct({...editingProduct, barcode: e.target.value})} className="flex-1 p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold" />
-                      <button type="button" onClick={() => setIsScannerOpen(true)} className="w-14 bg-slate-100 rounded-2xl flex items-center justify-center text-xl hover:bg-slate-200">📷</button>
-                    </div>
+                    <input type="text" value={editingProduct.barcode || ''} onChange={e => setEditingProduct({...editingProduct, barcode: e.target.value})} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold" />
                   </div>
                 </div>
               </div>

@@ -12,7 +12,6 @@ import {
 } from '../types';
 import { suggestInvoiceNotes } from '../services/geminiService';
 import { exportToPDF } from '../services/pdfService';
-import BarcodeScanner from './BarcodeScanner';
 import ConfirmModal from './ConfirmModal';
 
 interface DocumentEditorProps {
@@ -55,10 +54,6 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   const [isQuickClientOpen, setIsQuickClientOpen] = useState(false);
   const [isQuickProductOpen, setIsQuickProductOpen] = useState(false);
   
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-  const [scannerTarget, setScannerTarget] = useState<'ITEM' | 'QUICK_PRODUCT'>('ITEM');
-  const [activeScannerItemId, setActiveScannerItemId] = useState<string | null>(null);
-
   const [quickClient, setQuickClient] = useState<Client>({
     id: '', name: '', email: '', taxId: '', address: '', city: '', municipality: '', zipCode: ''
   });
@@ -119,32 +114,6 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
       return item;
     });
     setDoc({ ...doc, items: newItems });
-  };
-
-  const handleScanResult = (code: string) => {
-    if (scannerTarget === 'ITEM' && activeScannerItemId) {
-      const matched = products.find(p => p.barcode === code);
-      if (matched) {
-        const newItems = doc.items.map(it => it.id === activeScannerItemId ? { 
-          ...it, 
-          description: matched.description, 
-          unitPrice: matched.salePrice,
-          image: matched.image
-        } : it);
-        setDoc({ ...doc, items: newItems });
-      } else {
-        updateItem(activeScannerItemId, 'description', code);
-      }
-    } else if (scannerTarget === 'QUICK_PRODUCT') {
-      setQuickProduct({ ...quickProduct, barcode: code });
-    }
-    setIsScannerOpen(false);
-  };
-
-  const startScanning = (target: 'ITEM' | 'QUICK_PRODUCT', itemId?: string) => {
-    setScannerTarget(target);
-    setActiveScannerItemId(itemId || null);
-    setIsScannerOpen(true);
   };
 
   const handleQuickClientSave = (e: React.FormEvent) => {
@@ -243,8 +212,6 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
 
   return (
     <>
-      {isScannerOpen && <BarcodeScanner onScan={handleScanResult} onClose={() => setIsScannerOpen(false)} />}
-      
       <ConfirmModal 
         isOpen={isConfirmDeleteOpen}
         title="Eliminar Documento"
@@ -350,15 +317,8 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                           value={item.description}
                           onChange={(e) => updateItem(item.id, 'description', e.target.value)}
                           className="flex-1 p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none"
-                          placeholder="Nombre o escanea..."
+                          placeholder="Nombre o descripción..."
                         />
-                        <button 
-                          type="button" 
-                          onClick={() => startScanning('ITEM', item.id)}
-                          className="w-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-lg hover:bg-blue-100"
-                        >
-                          📷
-                        </button>
                       </div>
                     </div>
                     <div className="w-full md:w-24">
@@ -567,10 +527,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
               </div>
               <div>
                 <label className="text-[10px] font-black uppercase text-gray-400">Código de Barras</label>
-                <div className="flex gap-2">
-                  <input value={quickProduct.barcode || ''} onChange={e => setQuickProduct({...quickProduct, barcode: e.target.value})} className="flex-1 p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
-                  <button type="button" onClick={() => startScanning('QUICK_PRODUCT')} className={`w-14 rounded-2xl flex items-center justify-center text-xl transition-colors ${isCollection ? 'bg-violet-100 text-violet-600 hover:bg-violet-200' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>📷</button>
-                </div>
+                <input value={quickProduct.barcode || ''} onChange={e => setQuickProduct({...quickProduct, barcode: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
               </div>
               <button type="submit" className={`w-full py-5 text-white rounded-[24px] font-black shadow-xl mt-4 ${isCollection ? 'bg-violet-600 shadow-violet-100' : 'bg-indigo-600 shadow-indigo-100'}`}>Crear y Añadir</button>
             </form>
