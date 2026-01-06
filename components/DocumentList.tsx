@@ -32,9 +32,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
   // Estados para Registro de Pago
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [activeDocForPayment, setActiveDocForPayment] = useState<Document | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentAmountStr, setPaymentAmountStr] = useState<string>('0');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
-  const [paymentNote, setPaymentNote] = useState('');
 
   const isCollection = type === DocumentType.ACCOUNT_COLLECTION;
 
@@ -80,30 +79,32 @@ const DocumentList: React.FC<DocumentListProps> = ({
   };
 
   const handleOpenPayment = (e: React.MouseEvent, doc: Document) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.stopPropagation(); // Evitar que el clic abra la edición de la fila
     
     const total = calculateTotal(doc);
     const paid = calculatePaid(doc);
-    const remaining = total - paid;
+    const remaining = Math.max(0, total - paid);
     
     setActiveDocForPayment(doc);
-    setPaymentAmount(remaining > 0 ? remaining : 0);
+    setPaymentAmountStr(remaining.toString());
     setPaymentMethod(doc.paymentMethod || 'Efectivo');
-    setPaymentNote('');
     setIsPaymentModalOpen(true);
   };
 
   const handleRegisterPayment = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeDocForPayment || paymentAmount < 0) return;
+    const amountNum = parseFloat(paymentAmountStr);
+    
+    if (!activeDocForPayment || isNaN(amountNum) || amountNum <= 0) {
+      alert("Ingresa un monto válido mayor a cero.");
+      return;
+    }
 
     const newPayment: Payment = {
       id: Math.random().toString(36).substr(2, 9),
       date: new Date().toISOString().split('T')[0],
-      amount: paymentAmount,
-      method: paymentMethod,
-      note: paymentNote
+      amount: amountNum,
+      method: paymentMethod
     };
 
     const updatedPayments = [...(activeDocForPayment.payments || []), newPayment];
@@ -111,10 +112,10 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const docTotal = calculateTotal(activeDocForPayment);
 
     let newStatus = activeDocForPayment.status;
-    // Si el total pagado es igual o mayor al total (margen de 1 unidad por redondeo)
-    if (totalPaid >= docTotal - 1) { 
+    // Si lo pagado cubre el total (con margen para decimales)
+    if (totalPaid >= docTotal - 0.1) { 
       newStatus = DocumentStatus.PAID;
-    } else if (totalPaid > 0) {
+    } else {
       newStatus = DocumentStatus.PARTIAL;
     }
 
@@ -151,11 +152,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
   );
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-20 md:pb-10">
+    <div className="relative space-y-6 animate-fadeIn pb-24 md:pb-10">
       <ConfirmModal 
         isOpen={!!docToDelete}
         title={`Eliminar ${type}`}
-        message="¿Estás seguro de que deseas eliminar este registro? Los productos se devolverán automáticamente al stock del catálogo."
+        message="¿Estás seguro de que deseas eliminar este registro? Los productos se devolverán automáticamente al inventario."
         onConfirm={() => {
           if (docToDelete) onDelete(docToDelete);
           setDocToDelete(null);
@@ -163,79 +164,15 @@ const DocumentList: React.FC<DocumentListProps> = ({
         onCancel={() => setDocToDelete(null)}
       />
 
-      {/* Modal de Registro de Pago (Z-Index Elevado y Capa de Cierre) */}
-      {isPaymentModalOpen && activeDocForPayment && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[500] flex items-center justify-center p-4" onClick={() => setIsPaymentModalOpen(false)}>
-          <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden animate-slideUp shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="bg-emerald-600 p-8 text-white relative">
-              <h3 className="text-2xl font-black tracking-tight">Cobrar Ahora</h3>
-              <p className="text-emerald-100 text-[10px] font-black uppercase tracking-widest mt-1">Doc No. {activeDocForPayment.number}</p>
-              <button onClick={() => setIsPaymentModalOpen(false)} className="absolute top-6 right-6 text-white/60 hover:text-white text-xl">✕</button>
-            </div>
-            
-            <form onSubmit={handleRegisterPayment} className="p-8 space-y-6">
-              <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
-                 <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">Monto Pendiente</p>
-                 <p className="text-2xl font-black text-emerald-900">{formatCurrency(calculateTotal(activeDocForPayment) - calculatePaid(activeDocForPayment))}</p>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Cantidad Recibida</label>
-                <input 
-                  type="number" 
-                  autoFocus
-                  required
-                  value={paymentAmount} 
-                  onChange={e => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-black text-2xl text-emerald-600 outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                  placeholder="0"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Método utilizado</label>
-                <select 
-                  value={paymentMethod} 
-                  onChange={e => setPaymentMethod(e.target.value)}
-                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="Efectivo">Efectivo</option>
-                  <option value="Transferencia">Transferencia Bancaria</option>
-                  <option value="Nequi">Nequi</option>
-                  <option value="Daviplata">Daviplata</option>
-                  <option value="Tarjeta">Tarjeta Débito/Crédito</option>
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-2 pt-2">
-                <button 
-                  type="submit"
-                  className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black shadow-lg shadow-emerald-200 active:scale-95 transition-all uppercase tracking-widest text-xs"
-                >
-                  Confirmar Cobro
-                </button>
-                <button 
-                  type="button"
-                  onClick={() => setIsPaymentModalOpen(false)} 
-                  className="w-full py-4 font-bold text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">{type}S</h2>
-          <p className="text-gray-500 font-medium">Historial y gestión de pagos pendientes</p>
+          <p className="text-gray-500 font-medium">Gestión de cartera y pagos</p>
         </div>
         <button 
           onClick={() => navigate(`${getRouteBase(type)}/new`)}
           className={`w-full sm:w-auto px-6 py-4 text-white rounded-2xl font-bold shadow-lg transition-all flex items-center justify-center space-x-2 active:scale-95 ${
-            isCollection ? 'bg-violet-600 shadow-violet-100 hover:bg-violet-700' : 'bg-blue-600 shadow-blue-100 hover:bg-blue-700'
+            isCollection ? 'bg-violet-600 shadow-violet-100' : 'bg-blue-600 shadow-blue-100'
           }`}
         >
           <span className="text-xl font-black">+</span>
@@ -262,6 +199,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
           const total = calculateTotal(doc);
           const paid = calculatePaid(doc);
           const balance = total - paid;
+          const isPaid = balance <= 0.1;
+          
           return (
             <div key={doc.id} className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm space-y-4">
               <div className="flex justify-between items-start">
@@ -273,31 +212,29 @@ const DocumentList: React.FC<DocumentListProps> = ({
               </div>
               
               <div className="space-y-1">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Receptor</p>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Cliente</p>
                 <p className="font-bold text-gray-800 truncate">{getClientName(doc.clientId)}</p>
               </div>
 
               <div className="flex justify-between items-end pt-4 border-t border-gray-50">
                 <div className="flex-1">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Importe Total</p>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</p>
                   <p className="text-xl font-black text-gray-900">{formatCurrency(total)}</p>
-                  {balance > 0.9 && <p className="text-[10px] font-black text-emerald-600 uppercase tracking-tighter">Pendiente: {formatCurrency(balance)}</p>}
+                  {!isPaid && <p className="text-[10px] font-black text-emerald-600 uppercase">Por cobrar: {formatCurrency(balance)}</p>}
                 </div>
                 <div className="flex gap-2">
-                  {(doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && balance > 0.9 && (
+                  {!isPaid && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
                     <button 
                       onClick={(e) => handleOpenPayment(e, doc)} 
-                      className="w-12 h-12 flex items-center justify-center bg-emerald-600 text-white rounded-2xl shadow-lg shadow-emerald-100 transition-all active:scale-90"
-                      title="Registrar Pago"
+                      className="w-14 h-14 flex items-center justify-center bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-100 transition-all active:scale-90"
                     >
-                      <span className="text-xl">💸</span>
+                      <span className="text-2xl">💸</span>
                     </button>
                   )}
-                  <button onClick={(e) => { e.stopPropagation(); handleExportPDF(doc); }} className="w-10 h-10 flex items-center justify-center bg-slate-100 text-slate-600 rounded-xl transition-colors">📥</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleExportPDF(doc); }} className="w-11 h-11 flex items-center justify-center bg-slate-100 text-slate-600 rounded-xl">📥</button>
                 </div>
               </div>
               
-              {/* Botones de acción adicionales en móvil */}
               <div className="grid grid-cols-2 gap-2 pt-2">
                 <button 
                   onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)}
@@ -335,6 +272,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
                  const total = calculateTotal(doc);
                  const paid = calculatePaid(doc);
                  const balance = total - paid;
+                 const isPaid = balance <= 0.1;
+
                  return (
                 <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors group">
                   <td className={`px-6 py-4 font-bold ${isCollection ? 'text-violet-700' : 'text-gray-900'}`}>#{doc.number}</td>
@@ -347,11 +286,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   </td>
                   <td className="px-6 py-4">
                     <p className="font-black text-gray-900">{formatCurrency(total)}</p>
-                    {balance > 0.9 && <p className="text-[9px] font-black text-emerald-600 uppercase tracking-tighter">Deuda: {formatCurrency(balance)}</p>}
+                    {!isPaid && <p className="text-[9px] font-black text-emerald-600 uppercase">Saldo: {formatCurrency(balance)}</p>}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end space-x-2">
-                      {balance > 0.9 && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
+                      {!isPaid && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
                         <button onClick={(e) => handleOpenPayment(e, doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Cobrar">💸</button>
                       )}
                       <button onClick={(e) => { e.stopPropagation(); handleExportPDF(doc); }} className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all" title="PDF">📥</button>
@@ -368,7 +307,81 @@ const DocumentList: React.FC<DocumentListProps> = ({
 
       {filteredDocs.length === 0 && (
         <div className="py-20 text-center bg-white rounded-[32px] border border-gray-100">
-          <p className="text-gray-400 font-medium">No se encontraron registros para esta búsqueda.</p>
+          <p className="text-gray-400 font-medium">No se encontraron registros registrados.</p>
+        </div>
+      )}
+
+      {/* MODAL DE PAGO - MOVIDO AL FINAL Y CON Z-INDEX MÁXIMO */}
+      {isPaymentModalOpen && activeDocForPayment && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" 
+          style={{ zIndex: 9999 }}
+          onClick={() => setIsPaymentModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden animate-slideUp shadow-2xl" 
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bg-emerald-600 p-8 text-white relative">
+              <h3 className="text-2xl font-black tracking-tight">Registrar Pago</h3>
+              <p className="text-emerald-100 text-[10px] font-black uppercase tracking-widest mt-1">Recibo para Doc. {activeDocForPayment.number}</p>
+              <button onClick={() => setIsPaymentModalOpen(false)} className="absolute top-6 right-6 text-white/60 hover:text-white text-xl p-2">✕</button>
+            </div>
+            
+            <form onSubmit={handleRegisterPayment} className="p-8 space-y-6">
+              <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 text-center">
+                 <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">Saldo Actual Pendiente</p>
+                 <p className="text-2xl font-black text-emerald-900">
+                    {formatCurrency(calculateTotal(activeDocForPayment) - calculatePaid(activeDocForPayment))}
+                 </p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Monto que recibes</label>
+                <input 
+                  type="number" 
+                  autoFocus
+                  required
+                  step="any"
+                  value={paymentAmountStr} 
+                  onChange={e => setPaymentAmountStr(e.target.value)}
+                  className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl font-black text-2xl text-emerald-600 outline-none focus:ring-4 focus:ring-emerald-500/20 transition-all"
+                  placeholder="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Medio de Recepción</label>
+                <select 
+                  value={paymentMethod} 
+                  onChange={e => setPaymentMethod(e.target.value)}
+                  className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl font-bold outline-none focus:ring-4 focus:ring-emerald-500/20"
+                >
+                  <option value="Efectivo">Efectivo</option>
+                  <option value="Transferencia">Transferencia Bancaria</option>
+                  <option value="Nequi">Nequi</option>
+                  <option value="Daviplata">Daviplata</option>
+                  <option value="Tarjeta">Tarjeta Débito/Crédito</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-2 pt-2">
+                <button 
+                  type="submit"
+                  className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black shadow-lg shadow-emerald-200 active:scale-95 transition-all uppercase tracking-widest text-xs"
+                >
+                  Confirmar y Guardar
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setIsPaymentModalOpen(false)} 
+                  className="w-full py-4 font-bold text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
