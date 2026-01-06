@@ -1,28 +1,35 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Document, DocumentType, DocumentStatus, AppSettings, Expense } from '../types';
+import { Document, DocumentType, DocumentStatus, AppSettings, Expense, Client } from '../types';
+import { exportToPDF } from '../services/pdfService';
+import ConfirmModal from './ConfirmModal';
 
 interface DashboardProps {
   documents: Document[];
   expenses: Expense[];
   clientsCount: number;
   settings: AppSettings;
+  onDeleteDoc: (id: string) => void;
+  clients: Client[];
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount, settings }) => {
+const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount, settings, onDeleteDoc, clients }) => {
   const navigate = useNavigate();
+  const [docToDelete, setDocToDelete] = useState<string | null>(null);
 
   const calculateTotal = (doc: Document) => {
     const subtotal = doc.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
-    return subtotal + (subtotal * (doc.taxRate / 100));
+    const tax = subtotal * (doc.taxRate / 100);
+    const gross = subtotal + tax;
+    const withholding = gross * ((doc.withholdingRate || 0) / 100);
+    return gross - withholding;
   };
 
   const calculatePaidAmount = (doc: Document) => {
     return (doc.payments || []).reduce((acc, p) => acc + p.amount, 0);
   };
 
-  // Se consideran Ingresos tanto Facturas como Cuentas de Cobro
   const revenueDocs = documents.filter(d => d.type === DocumentType.INVOICE || d.type === DocumentType.ACCOUNT_COLLECTION);
   const totalInvoiced = revenueDocs.reduce((acc, i) => acc + calculatePaidAmount(i), 0);
   const totalExpenses = expenses.reduce((acc, e) => acc + e.amount, 0);
@@ -40,8 +47,30 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
     }).format(amount);
   };
 
+  const handleExportPDF = (doc: Document) => {
+    const client = clients.find(c => c.id === doc.clientId);
+    exportToPDF(doc, client, settings);
+  };
+
+  const getRouteBase = (docType: DocumentType) => {
+    if (docType === DocumentType.INVOICE) return '/invoices';
+    if (docType === DocumentType.ACCOUNT_COLLECTION) return '/collections';
+    return '/quotes';
+  };
+
   return (
     <div className="space-y-8 animate-fadeIn">
+      <ConfirmModal 
+        isOpen={!!docToDelete}
+        title="Eliminar Documento"
+        message="¿Estás seguro de que deseas eliminar este registro? Si es una factura, el stock de los productos se reintegrará automáticamente."
+        onConfirm={() => {
+          if (docToDelete) onDeleteDoc(docToDelete);
+          setDocToDelete(null);
+        }}
+        onCancel={() => setDocToDelete(null)}
+      />
+
       <header className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">Panel de Control</h2>
@@ -103,18 +132,15 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
                   <th className="px-6 py-4">Documento</th>
                   <th className="px-6 py-4">Estado</th>
                   <th className="px-6 py-4">Total</th>
-                  <th className="px-6 py-4 text-right">Fecha</th>
+                  <th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {documents.slice(0, 6).map(doc => (
-                  <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => {
-                    const base = doc.type === DocumentType.INVOICE ? '/invoices' : doc.type === DocumentType.ACCOUNT_COLLECTION ? '/collections' : '/quotes';
-                    navigate(`${base}/edit/${doc.id}`);
-                  }}>
-                    <td className="px-6 py-4">
-                      <p className="font-bold text-gray-800">#{doc.number}</p>
-                      <p className="text-xs text-gray-400 capitalize">{doc.type.toLowerCase()}</p>
+                {documents.slice(0, 8).map(doc => (
+                  <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors group">
+                    <td className="px-6 py-4" onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)}>
+                      <p className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">#{doc.number}</p>
+                      <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest">{doc.type}</p>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${
@@ -132,8 +158,12 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
                     <td className="px-6 py-4 font-black text-gray-900">
                       {formatCurrency(calculateTotal(doc))}
                     </td>
-                    <td className="px-6 py-4 text-right text-gray-400 text-xs font-medium">
-                      {doc.date}
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <button onClick={(e) => { e.stopPropagation(); handleExportPDF(doc); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg">📥</button>
+                         <button onClick={(e) => { e.stopPropagation(); navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button>
+                         <button onClick={(e) => { e.stopPropagation(); setDocToDelete(doc.id); }} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg">🗑️</button>
+                      </div>
                     </td>
                   </tr>
                 ))}

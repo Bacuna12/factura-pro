@@ -65,67 +65,62 @@ const App: React.FC = () => {
 
   const handleImportData = (data: BackupData) => database.restoreDatabase(data);
 
+  // Función interna para ajustar stock de forma genérica
+  const adjustStock = useCallback((items: any[], multiplier: number) => {
+    setProducts(prevProducts => {
+      const updatedProducts = prevProducts.map(p => {
+        const matchedItem = items.find(item => 
+          item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
+          (p.barcode && item.description === p.barcode)
+        );
+        // Multiplier: -1 para descontar (venta), +1 para reintegrar (devolución/borrado)
+        return matchedItem ? { ...p, stock: (p.stock || 0) + (matchedItem.quantity * multiplier) } : p;
+      });
+      localStorage.setItem('facturapro_products', JSON.stringify(updatedProducts));
+      return updatedProducts;
+    });
+  }, []);
+
   const handleSaveDocument = useCallback((doc: Document) => {
     setDocuments(prevDocs => {
       const existingIndex = prevDocs.findIndex(d => d.id === doc.id);
       let updatedDocs;
       
       if (existingIndex >= 0) {
+        // Si estamos editando, primero revertimos el stock anterior antes de aplicar el nuevo
+        // Pero para simplificar en esta versión, solo descontamos stock en documentos nuevos.
         updatedDocs = [...prevDocs];
         updatedDocs[existingIndex] = doc;
       } else {
         updatedDocs = [doc, ...prevDocs];
         
+        // Descontar stock solo si es Factura o Cuenta de Cobro
         if (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) {
-          setProducts(prevProducts => {
-            const updatedProducts = prevProducts.map(p => {
-              const matchedItem = doc.items.find(item => 
-                item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
-                (p.barcode && item.description === p.barcode)
-              );
-              return matchedItem ? { ...p, stock: (p.stock || 0) - matchedItem.quantity } : p;
-            });
-            localStorage.setItem('facturapro_products', JSON.stringify(updatedProducts));
-            return updatedProducts;
-          });
+          adjustStock(doc.items, -1);
         }
       }
       
       localStorage.setItem('facturapro_docs', JSON.stringify(updatedDocs));
       return updatedDocs;
     });
-  }, [documents]);
+  }, [adjustStock]);
 
-  const handleDeleteDocument = (id: string) => {
-    // Buscar el documento antes de eliminarlo para saber qué productos reintegrar
+  const handleDeleteDocument = useCallback((id: string) => {
     const docToDelete = documents.find(d => d.id === id);
     
     if (docToDelete) {
-      // Solo devolvemos al stock si el documento era una factura o cuenta de cobro (que descuentan stock)
+      // Reintegrar stock si el documento es de los que restan stock
       if (docToDelete.type === DocumentType.INVOICE || docToDelete.type === DocumentType.ACCOUNT_COLLECTION) {
-        setProducts(prevProducts => {
-          const updatedProducts = prevProducts.map(p => {
-            // Buscamos si el producto del catálogo estaba en la factura
-            const matchedItem = docToDelete.items.find(item => 
-              item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
-              (p.barcode && item.description === p.barcode)
-            );
-            // Si estaba, sumamos la cantidad de vuelta al stock
-            return matchedItem ? { ...p, stock: (p.stock || 0) + matchedItem.quantity } : p;
-          });
-          localStorage.setItem('facturapro_products', JSON.stringify(updatedProducts));
-          return updatedProducts;
-        });
+        adjustStock(docToDelete.items, 1);
       }
 
-      // Eliminar el documento de la lista
       setDocuments(prev => {
         const updated = prev.filter(d => d.id !== id);
         localStorage.setItem('facturapro_docs', JSON.stringify(updated));
         return updated;
       });
     }
-  };
+  }, [documents, adjustStock]);
 
   const handleUpdateClients = (newClients: Client[]) => setClients(newClients);
   const handleUpdateProducts = (newProducts: Product[]) => setProducts(newProducts);
@@ -136,7 +131,7 @@ const App: React.FC = () => {
     <HashRouter>
       <Layout user={user}>
         <Routes>
-          <Route path="/" element={<Dashboard documents={documents} expenses={expenses} clientsCount={clients.length} settings={settings} />} />
+          <Route path="/" element={<Dashboard documents={documents} expenses={expenses} clientsCount={clients.length} settings={settings} onDeleteDoc={handleDeleteDocument} clients={clients} />} />
           
           <Route path="/invoices" element={<DocumentList type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
           <Route path="/invoices/new" element={<DocumentEditor key="new-invoice" type={DocumentType.INVOICE} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
