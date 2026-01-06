@@ -29,6 +29,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
 }) => {
   const navigate = useNavigate();
   const isCollection = type === DocumentType.ACCOUNT_COLLECTION;
+  const [isSaving, setIsSaving] = useState(false);
   
   const [doc, setDoc] = useState<Document>(initialData || {
     id: Math.random().toString(36).substr(2, 9),
@@ -206,10 +207,18 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
       alert("Por favor selecciona un cliente.");
       return;
     }
+    
+    setIsSaving(true);
+    
+    // Llamamos al guardado
     onSave(doc);
-    if (type === DocumentType.INVOICE) navigate('/invoices');
-    else if (type === DocumentType.ACCOUNT_COLLECTION) navigate('/collections');
-    else navigate('/quotes');
+    
+    // Esperamos un breve momento para asegurar que el estado se procese y localStorage se escriba
+    setTimeout(() => {
+      if (type === DocumentType.INVOICE) navigate('/invoices');
+      else if (type === DocumentType.ACCOUNT_COLLECTION) navigate('/collections');
+      else navigate('/quotes');
+    }, 300);
   };
 
   return (
@@ -376,8 +385,12 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                 </div>
               </div>
 
-              <button type="submit" className="w-full mt-10 py-5 bg-white text-gray-900 rounded-[24px] font-black shadow-lg hover:bg-gray-50 transition-all active:scale-95 uppercase tracking-widest text-xs">
-                Guardar {type}
+              <button 
+                type="submit" 
+                disabled={isSaving}
+                className={`w-full mt-10 py-5 bg-white text-gray-900 rounded-[24px] font-black shadow-lg hover:bg-gray-50 transition-all active:scale-95 uppercase tracking-widest text-xs flex items-center justify-center ${isSaving ? 'opacity-70' : ''}`}
+              >
+                {isSaving ? 'Guardando...' : `Guardar ${type}`}
               </button>
             </div>
           </div>

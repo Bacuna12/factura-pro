@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { HashRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
@@ -41,6 +41,8 @@ const INITIAL_SETTINGS: AppSettings = {
 
 const App: React.FC = () => {
   const [user] = useState<User>(DEFAULT_USER);
+  
+  // Estados inicializados directamente desde localStorage para máxima velocidad
   const [documents, setDocuments] = useState<Document[]>(() => {
     const saved = localStorage.getItem('facturapro_docs');
     return saved ? JSON.parse(saved) : [];
@@ -56,7 +58,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
   });
 
-  // Guardado persistente automático
+  // Efectos de persistencia (Salvaguarda secundaria)
   useEffect(() => { localStorage.setItem('facturapro_docs', JSON.stringify(documents)); }, [documents]);
   useEffect(() => { localStorage.setItem('facturapro_expenses', JSON.stringify(expenses)); }, [expenses]);
   useEffect(() => { localStorage.setItem('facturapro_clients', JSON.stringify(clients)); }, [clients]);
@@ -65,34 +67,42 @@ const App: React.FC = () => {
 
   const handleImportData = (data: BackupData) => database.restoreDatabase(data);
 
-  const handleSaveDocument = (doc: Document) => {
+  const handleSaveDocument = useCallback((doc: Document) => {
+    console.log("Guardando documento:", doc.number);
+    
+    // 1. Actualizar documentos
     setDocuments(prevDocs => {
       const existingIndex = prevDocs.findIndex(d => d.id === doc.id);
-      let newDocs;
+      let updatedDocs;
       
       if (existingIndex >= 0) {
-        newDocs = [...prevDocs];
-        newDocs[existingIndex] = doc;
+        updatedDocs = [...prevDocs];
+        updatedDocs[existingIndex] = doc;
       } else {
-        newDocs = [doc, ...prevDocs];
-        
-        // Lógica de stock solo para documentos nuevos de salida
-        if (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) {
-          setProducts(prevProducts => prevProducts.map(p => {
-            const matchedItem = doc.items.find(item => 
-              item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
-              (p.barcode && item.description === p.barcode)
-            );
-            return matchedItem ? { ...p, stock: (p.stock || 0) - matchedItem.quantity } : p;
-          }));
-        }
+        updatedDocs = [doc, ...prevDocs];
       }
       
-      // Persistir inmediatamente para evitar pérdida por navegación rápida
-      localStorage.setItem('facturapro_docs', JSON.stringify(newDocs));
-      return newDocs;
+      // Persistencia forzada inmediata
+      localStorage.setItem('facturapro_docs', JSON.stringify(updatedDocs));
+      return updatedDocs;
     });
-  };
+
+    // 2. Lógica de stock fuera del actualizador de documentos para evitar advertencias de React
+    const isNew = !documents.some(d => d.id === doc.id);
+    if (isNew && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION)) {
+      setProducts(prevProducts => {
+        const updatedProducts = prevProducts.map(p => {
+          const matchedItem = doc.items.find(item => 
+            item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
+            (p.barcode && item.description === p.barcode)
+          );
+          return matchedItem ? { ...p, stock: (p.stock || 0) - matchedItem.quantity } : p;
+        });
+        localStorage.setItem('facturapro_products', JSON.stringify(updatedProducts));
+        return updatedProducts;
+      });
+    }
+  }, [documents]);
 
   const handleDeleteDocument = (id: string) => {
     setDocuments(prev => {
