@@ -17,7 +17,7 @@ export const extractClientDataFromId = async (base64Image: string): Promise<{nam
               }
             },
             {
-              text: "Extrae los datos de este documento de identidad para el registro de un cliente. Devuelve estrictamente un JSON con: name (Nombre completo), taxId (Número de identificación/cédula/NIT), address (Dirección si aparece), city (Ciudad si aparece). Si no encuentras un campo, deja el string vacío."
+              text: "Extrae los datos de este documento de identidad para el registro de un cliente. Devuelve estrictamente un JSON con: name (Nombre completo), taxId (Número de identificación/cédula/NIT, este campo debe contener SOLO NÚMEROS, sin puntos, comas, guiones o espacios), address (Dirección si aparece), city (Ciudad si aparece). Si no encuentras un campo, deja el string vacío."
             }
           ]
         }

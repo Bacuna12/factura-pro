@@ -1,7 +1,7 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Document, DocumentType, DocumentStatus, AppSettings, Expense, Client, Payment, User, UserRole } from '../types';
+import { Document, DocumentType, DocumentStatus, AppSettings, Expense, Client, Payment, User, UserRole, Product } from '../types';
 import { exportToPDF } from '../services/pdfService';
 import ConfirmModal from './ConfirmModal';
 
@@ -14,9 +14,10 @@ interface DashboardProps {
   onDeleteDoc: (id: string) => void;
   onUpdateDoc: (doc: Document) => void;
   clients: Client[];
+  products: Product[];
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ user, documents, expenses, clientsCount, settings, onDeleteDoc, onUpdateDoc, clients }) => {
+const Dashboard: React.FC<DashboardProps> = ({ user, documents, expenses, clientsCount, settings, onDeleteDoc, onUpdateDoc, clients, products }) => {
   const navigate = useNavigate();
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
   
@@ -26,6 +27,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, documents, expenses, client
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
 
   const isAdmin = user.role === UserRole.ADMIN;
+
+  const lowStockProducts = useMemo(() => {
+    return products.filter(p => (p.stock || 0) < 5).slice(0, 5);
+  }, [products]);
 
   const calculateTotal = (doc: Document) => {
     const subtotal = doc.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
@@ -65,36 +70,28 @@ const Dashboard: React.FC<DashboardProps> = ({ user, documents, expenses, client
     const total = calculateTotal(doc);
     const paid = calculatePaidAmount(doc);
     const remaining = Math.max(0, total - paid);
-    
     setActiveDocForPayment(doc);
     setPaymentAmount(remaining.toFixed(0));
     setPaymentMethod(doc.paymentMethod || 'Efectivo');
-    
-    setTimeout(() => {
-        setIsPaymentModalOpen(true);
-    }, 50);
+    setTimeout(() => setIsPaymentModalOpen(true), 50);
   };
 
   const handleRegisterPayment = (e: React.FormEvent) => {
     e.preventDefault();
     const amountNum = parseFloat(paymentAmount);
     if (!activeDocForPayment || isNaN(amountNum) || amountNum <= 0) return;
-
     const newPayment: Payment = {
       id: Math.random().toString(36).substr(2, 9),
       date: new Date().toISOString().split('T')[0],
       amount: amountNum,
       method: paymentMethod
     };
-
     const updatedPayments = [...(activeDocForPayment.payments || []), newPayment];
     const totalPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
     const docTotal = calculateTotal(activeDocForPayment);
-
     let newStatus = activeDocForPayment.status;
     if (totalPaid >= docTotal - 1) newStatus = DocumentStatus.PAID;
     else if (totalPaid > 0) newStatus = DocumentStatus.PARTIAL;
-
     onUpdateDoc({ ...activeDocForPayment, payments: updatedPayments, status: newStatus, paymentMethod });
     setIsPaymentModalOpen(false);
     setActiveDocForPayment(null);
@@ -106,18 +103,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, documents, expenses, client
         isOpen={!!docToDelete}
         title="Eliminar Documento"
         message="¿Estás seguro?"
-        onConfirm={() => {
-          if (docToDelete) onDeleteDoc(docToDelete);
-          setDocToDelete(null);
-        }}
+        onConfirm={() => { if (docToDelete) onDeleteDoc(docToDelete); setDocToDelete(null); }}
         onCancel={() => setDocToDelete(null)}
       />
 
       {isPaymentModalOpen && activeDocForPayment && (
-        <div 
-          className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 z-[99999]"
-          onClick={() => setIsPaymentModalOpen(false)}
-        >
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4 z-[99999]" onClick={() => setIsPaymentModalOpen(false)}>
           <div className="bg-white dark:bg-slate-900 rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="bg-emerald-600 p-8 text-white">
               <h3 className="text-2xl font-black">Cobrar Documento</h3>
@@ -146,6 +137,24 @@ const Dashboard: React.FC<DashboardProps> = ({ user, documents, expenses, client
         <p className="text-gray-500 dark:text-slate-400 font-medium">{isAdmin ? 'Resumen financiero actual' : 'Panel de operaciones rápidas'}</p>
       </header>
 
+      {isAdmin && lowStockProducts.length > 0 && (
+        <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-800/50 p-6 rounded-[32px] animate-pulse flex flex-col md:flex-row items-center justify-between gap-4">
+           <div className="flex items-center gap-4">
+              <span className="text-3xl">⚠️</span>
+              <div>
+                <h4 className="font-black text-rose-700 dark:text-rose-400 text-sm uppercase tracking-widest">Alerta de Inventario Crítico</h4>
+                <p className="text-rose-600/70 dark:text-rose-500/70 text-xs font-bold">Tienes {lowStockProducts.length} productos por agotarse.</p>
+              </div>
+           </div>
+           <div className="flex gap-2">
+              {lowStockProducts.map(p => (
+                <div key={p.id} className="w-8 h-8 rounded-lg bg-rose-200 dark:bg-rose-800 flex items-center justify-center text-[10px] font-black" title={p.description}>{p.stock}</div>
+              ))}
+              <button onClick={() => navigate('/products')} className="ml-2 px-4 py-2 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase">Ver Todos</button>
+           </div>
+        </div>
+      )}
+
       {isAdmin ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard title="Ingresos" value={formatCurrency(totalInvoiced)} icon="💰" color="bg-emerald-500" />
@@ -155,12 +164,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, documents, expenses, client
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <button onClick={() => navigate('/pos')} className="bg-blue-600 p-8 rounded-[40px] text-white text-left shadow-xl shadow-blue-100 dark:shadow-none hover:scale-[1.02] transition-all">
+          <button onClick={() => navigate('/pos')} className="bg-blue-600 p-8 rounded-[40px] text-white text-left shadow-xl hover:scale-[1.02] transition-all">
             <span className="text-4xl block mb-4">🛒</span>
             <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Abrir Caja</p>
             <h3 className="text-2xl font-black">Punto de Venta</h3>
           </button>
-          <button onClick={() => navigate('/invoices/new')} className="bg-slate-900 dark:bg-slate-800 p-8 rounded-[40px] text-white text-left shadow-xl shadow-slate-100 dark:shadow-none hover:scale-[1.02] transition-all border border-white/5">
+          <button onClick={() => navigate('/invoices/new')} className="bg-slate-900 p-8 rounded-[40px] text-white text-left shadow-xl hover:scale-[1.02] transition-all border border-white/5">
             <span className="text-4xl block mb-4">🧾</span>
             <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Nueva Venta</p>
             <h3 className="text-2xl font-black">Facturar</h3>

@@ -2,6 +2,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppSettings, BackupData, PdfTemplate, User, UserRole } from '../types';
 import { database } from '../services/databaseService';
+import { 
+  exportClientsReport, 
+  exportProductsReport, 
+  exportToCSV, 
+  exportSalesReport, 
+  exportExpensesReport 
+} from '../services/pdfService';
 import ConfirmModal from './ConfirmModal';
 
 interface SettingsProps {
@@ -22,6 +29,15 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
     ...settings,
     pdfTemplate: settings.pdfTemplate || PdfTemplate.PROFESSIONAL
   });
+  
+  // Estados para reportes financieros
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1); // Primero de este mes
+    return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+
   const [dbStats, setDbStats] = useState(database.getStats());
   const [users, setUsers] = useState<User[]>(() => JSON.parse(localStorage.getItem('facturapro_users') || '[]'));
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
@@ -116,27 +132,155 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
 
       <header className="flex justify-between items-end">
         <div>
-          <h2 className="text-4xl font-black text-slate-900 tracking-tight">AJUSTES</h2>
-          <p className="text-slate-500 font-medium">Configuración de marca y sistema</p>
+          <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">AJUSTES</h2>
+          <p className="text-slate-500 dark:text-slate-400 font-medium">Configuración de marca y sistema</p>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Base de Datos</p>
-          <p className="text-sm font-black text-slate-900">{dbStats.totalRecords} Registros</p>
+          <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Base de Datos</p>
+          <p className="text-sm font-black text-slate-900 dark:text-slate-100">{dbStats.totalRecords} Registros</p>
         </div>
       </header>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* PERFIL CORPORATIVO */}
-        <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 p-8 md:p-10 space-y-10">
-          <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
+        
+        {/* REPORTES FINANCIEROS Y CONTABLES */}
+        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-8 md:p-10 space-y-8">
+          <div className="flex items-center gap-4 border-b border-slate-50 dark:border-slate-800 pb-6">
+            <span className="text-3xl">💹</span>
+            <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Reportes Financieros</h3>
+          </div>
+
+          <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-6">
+            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4">Seleccionar Rango de Consulta</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Fecha Inicio</label>
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border border-slate-200 dark:border-slate-700 font-bold" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Fecha Fin</label>
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border border-slate-200 dark:border-slate-700 font-bold" />
+              </div>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between ml-1">
+                <p className="text-[11px] font-black text-slate-800 dark:text-slate-400 uppercase tracking-widest">Ventas (Ingresos)</p>
+                <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[9px] px-2 py-0.5 rounded-lg font-black">ACTIVO</span>
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => exportSalesReport(allData.documents, allData.clients, settings, startDate, endDate)}
+                  className="flex-1 p-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 dark:shadow-none"
+                >
+                  <span>📥</span> PDF Ventas
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    const filtered = allData.documents.filter(d => d.date >= startDate && d.date <= endDate);
+                    exportToCSV(filtered, `Ventas_${startDate}_${endDate}`);
+                  }}
+                  className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black text-[10px] hover:bg-slate-200 transition-colors"
+                  title="CSV de Ventas"
+                >
+                  📊
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center justify-between ml-1">
+                <p className="text-[11px] font-black text-slate-800 dark:text-slate-400 uppercase tracking-widest">Gastos (Egresos)</p>
+                <span className="bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-[9px] px-2 py-0.5 rounded-lg font-black">ACTIVO</span>
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => exportExpensesReport(allData.expenses, settings, startDate, endDate)}
+                  className="flex-1 p-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 dark:shadow-none"
+                >
+                  <span>📥</span> PDF Gastos
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    const filtered = allData.expenses.filter(e => e.date >= startDate && e.date <= endDate);
+                    exportToCSV(filtered, `Gastos_${startDate}_${endDate}`);
+                  }}
+                  className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black text-[10px] hover:bg-slate-200 transition-colors"
+                  title="CSV de Gastos"
+                >
+                  📊
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* REPORTES DE MAESTROS */}
+        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-8 md:p-10 space-y-6">
+          <div className="flex items-center gap-4 border-b border-slate-50 dark:border-slate-800 pb-6">
+            <span className="text-3xl">📊</span>
+            <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Listados Maestros</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Clientes ({allData.clients.length})</p>
+              <div className="flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => exportClientsReport(allData.clients, settings)}
+                  className="flex-1 p-4 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-100 transition-colors"
+                >
+                  <span>📥</span> PDF Clientes
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => exportToCSV(allData.clients, 'Reporte_Clientes_FacturaPro')}
+                  className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black text-[10px] hover:bg-slate-200 transition-colors"
+                >
+                  📊
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Inventario ({allData.products.length})</p>
+              <div className="flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => exportProductsReport(allData.products, settings)}
+                  className="flex-1 p-4 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-100 transition-colors"
+                >
+                  <span>📥</span> PDF Inventario
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => exportToCSV(allData.products, 'Reporte_Inventario_FacturaPro')}
+                  className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black text-[10px] hover:bg-slate-200 transition-colors"
+                >
+                  📊
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-8 md:p-10 space-y-10">
+          <div className="flex items-center gap-4 border-b border-slate-50 dark:border-slate-800 pb-6">
             <span className="text-3xl">🏢</span>
-            <h3 className="text-2xl font-black text-slate-800 tracking-tighter">Perfil de Empresa</h3>
+            <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Perfil de Empresa</h3>
           </div>
 
           <div className="flex flex-col md:flex-row gap-10 items-start">
             <div className="w-full md:w-48 space-y-4">
-               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logo de Marca</p>
-               <div className="relative aspect-square w-full bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group">
+               <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Logo de Marca</p>
+               <div className="relative aspect-square w-full bg-slate-50 dark:bg-slate-800 rounded-[32px] border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden group">
                   {formData.logo ? (
                     <img src={formData.logo} className="w-full h-full object-contain p-4" alt="Logo" />
                   ) : (
@@ -152,36 +296,35 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
 
             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
               <div className="space-y-2 md:col-span-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Nombre Comercial</label>
-                <input required type="text" value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2">Nombre Comercial</label>
+                <input required type="text" value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">NIT / Identificación</label>
-                <input required type="text" value={formData.companyId} onChange={e => setFormData({...formData, companyId: e.target.value})} className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2">NIT / Identificación</label>
+                <input required type="text" value={formData.companyId} onChange={e => setFormData({...formData, companyId: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Impuesto por Defecto (%)</label>
-                <input required type="number" value={formData.defaultTaxRate} onChange={e => setFormData({...formData, defaultTaxRate: parseFloat(e.target.value)})} className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2">Impuesto por Defecto (%)</label>
+                <input required type="number" value={formData.defaultTaxRate} onChange={e => setFormData({...formData, defaultTaxRate: parseFloat(e.target.value)})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
               <div className="space-y-2 md:col-span-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Dirección Principal</label>
-                <input required type="text" value={formData.companyAddress} onChange={e => setFormData({...formData, companyAddress: e.target.value})} className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2">Dirección Principal</label>
+                <input required type="text" value={formData.companyAddress} onChange={e => setFormData({...formData, companyAddress: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
             </div>
           </div>
         </div>
 
-        {/* GESTIÓN DE USUARIOS */}
-        <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 p-8 md:p-10 space-y-6">
-          <div className="flex justify-between items-center border-b border-slate-50 pb-6">
+        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-8 md:p-10 space-y-6">
+          <div className="flex justify-between items-center border-b border-slate-50 dark:border-slate-800 pb-6">
             <div className="flex items-center gap-4">
               <span className="text-3xl">👥</span>
-              <h3 className="text-2xl font-black text-slate-800 tracking-tighter">Control de Accesos</h3>
+              <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Control de Accesos</h3>
             </div>
             <button 
               type="button" 
               onClick={() => handleOpenUserModal()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100"
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100 dark:shadow-none"
             >
               + Nuevo Usuario
             </button>
@@ -189,12 +332,12 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {users.map(u => (
-              <div key={u.id} className="p-5 rounded-3xl bg-slate-50 border border-slate-100 flex justify-between items-center group">
+              <div key={u.id} className="p-5 rounded-3xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex justify-between items-center group">
                 <div>
-                  <p className="font-black text-slate-900 leading-none">{u.name}</p>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-wider">{u.username}</p>
+                  <p className="font-black text-slate-900 dark:text-white leading-none">{u.name}</p>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mt-1 tracking-wider">{u.username}</p>
                   <span className={`inline-block mt-2 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase ${
-                    u.role === UserRole.ADMIN ? 'bg-violet-100 text-violet-600' : 'bg-blue-100 text-blue-600'
+                    u.role === UserRole.ADMIN ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-600' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600'
                   }`}>
                     {u.role}
                   </span>
@@ -208,11 +351,10 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
           </div>
         </div>
 
-        {/* PLANTILLAS PDF */}
-        <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 p-8 md:p-10 space-y-6">
-          <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
+        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-8 md:p-10 space-y-6">
+          <div className="flex items-center gap-4 border-b border-slate-50 dark:border-slate-800 pb-6">
             <span className="text-3xl">📄</span>
-            <h3 className="text-2xl font-black text-slate-800 tracking-tighter">Estilo de Documentos</h3>
+            <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Estilo de Documentos</h3>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -223,15 +365,15 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
                 onClick={() => setFormData({...formData, pdfTemplate: tmp.id})}
                 className={`p-6 rounded-[32px] border-2 text-left transition-all relative overflow-hidden group active:scale-95 ${
                   formData.pdfTemplate === tmp.id 
-                  ? 'border-blue-600 bg-blue-50' 
-                  : 'border-slate-50 bg-slate-50/50 hover:bg-slate-100 hover:border-slate-200'
+                  ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20' 
+                  : 'border-slate-50 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-200 dark:hover:border-slate-700'
                 }`}
               >
                 <div className="text-3xl mb-4">{tmp.icon}</div>
-                <h4 className={`font-black text-sm mb-1 ${formData.pdfTemplate === tmp.id ? 'text-blue-900' : 'text-slate-800'}`}>{tmp.name}</h4>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{tmp.desc}</p>
+                <h4 className={`font-black text-sm mb-1 ${formData.pdfTemplate === tmp.id ? 'text-blue-900 dark:text-blue-400' : 'text-slate-800 dark:text-slate-100'}`}>{tmp.name}</h4>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{tmp.desc}</p>
                 {formData.pdfTemplate === tmp.id && (
-                  <div className="absolute top-4 right-4 text-blue-600 text-xl font-black">✓</div>
+                  <div className="absolute top-4 right-4 text-blue-600 dark:text-blue-400 text-xl font-black">✓</div>
                 )}
               </button>
             ))}
@@ -239,13 +381,13 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
         </div>
 
         <div className="flex flex-col md:flex-row gap-4 items-center">
-          <button type="submit" className="flex-1 py-6 bg-slate-900 text-white rounded-[32px] font-black shadow-xl shadow-slate-200 active:scale-[0.98] transition-all uppercase tracking-widest text-sm">
+          <button type="submit" className="flex-1 py-6 bg-slate-900 dark:bg-blue-600 text-white rounded-[32px] font-black shadow-xl shadow-slate-200 dark:shadow-none active:scale-[0.98] transition-all uppercase tracking-widest text-sm">
             Guardar Todo los Ajustes
           </button>
           
           <div className="flex gap-2">
-            <button type="button" onClick={() => database.clearDatabase()} className="p-6 bg-rose-50 text-rose-600 rounded-[32px] font-black border border-rose-100 hover:bg-rose-100 transition-colors" title="Limpiar Base de Datos">🗑️</button>
-            <button type="button" onClick={() => importInputRef.current?.click()} className="p-6 bg-blue-50 text-blue-600 rounded-[32px] font-black border border-blue-100 hover:bg-blue-100 transition-colors" title="Importar Backup">📥</button>
+            <button type="button" onClick={() => database.clearDatabase()} className="p-6 bg-rose-50 dark:bg-rose-900/20 text-rose-600 rounded-[32px] font-black border border-rose-100 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors" title="Limpiar Base de Datos">🗑️</button>
+            <button type="button" onClick={() => importInputRef.current?.click()} className="p-6 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-[32px] font-black border border-blue-100 dark:border-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors" title="Importar Backup">📥</button>
             <input type="file" ref={importInputRef} onChange={e => {
                const file = e.target.files?.[0];
                if (file) {
@@ -258,41 +400,40 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
         </div>
       </form>
 
-      {/* MODAL DE USUARIO */}
       {isUserModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[99999] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl animate-slideUp">
-             <div className="bg-slate-900 p-8 text-white relative">
+          <div className="bg-white dark:bg-slate-950 rounded-[40px] w-full max-md overflow-hidden shadow-2xl animate-slideUp">
+             <div className="bg-slate-900 dark:bg-slate-900 p-8 text-white relative">
                 <h3 className="text-2xl font-black">{users.find(u => u.id === userForm.id) ? 'Editar Acceso' : 'Nuevo Usuario'}</h3>
                 <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">Definir credenciales y permisos</p>
                 <button onClick={() => setIsUserModalOpen(false)} className="absolute top-6 right-6 text-white/50 hover:text-white text-2xl transition-all">✕</button>
              </div>
              
-             <form onSubmit={handleSaveUser} className="p-8 space-y-5">
+             <form onSubmit={handleSaveUser} className="p-8 space-y-5 bg-white dark:bg-slate-950">
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Nombre Completo</label>
-                  <input required value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ej. Ana García" />
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-1 ml-1">Nombre Completo</label>
+                  <input required value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ej. Ana García" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Email / Usuario</label>
-                  <input required type="email" value={userForm.username} onChange={e => setUserForm({...userForm, username: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="ana@empresa.com" />
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-1 ml-1">Email / Usuario</label>
+                  <input required type="email" value={userForm.username} onChange={e => setUserForm({...userForm, username: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="ana@empresa.com" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Contraseña</label>
-                  <input required type="password" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-1 ml-1">Contraseña</label>
+                  <input required type="password" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Rol de Acceso</label>
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-1 ml-1">Rol de Acceso</label>
                   <select 
                     value={userForm.role}
                     onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}
-                    className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full p-4 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value={UserRole.SELLER}>Vendedor (Solo Operación)</option>
                     <option value={UserRole.ADMIN}>Administrador (Control Total)</option>
                   </select>
                 </div>
-                <button type="submit" className="w-full py-5 bg-slate-900 text-white rounded-3xl font-black shadow-xl shadow-slate-100 uppercase tracking-widest text-xs active:scale-95 transition-all">
+                <button type="submit" className="w-full py-5 bg-slate-900 dark:bg-blue-600 text-white rounded-3xl font-black shadow-xl uppercase tracking-widest text-xs active:scale-95 transition-all">
                   Guardar Usuario
                 </button>
              </form>

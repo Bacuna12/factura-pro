@@ -68,15 +68,24 @@ const DocumentList: React.FC<DocumentListProps> = ({
   };
 
   const filteredDocs = useMemo(() => {
+    const searchLower = searchTerm.toLowerCase();
     return documents
       .filter(d => d.type === type)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .filter(doc => {
-        const name = getClientName(doc.clientId).toLowerCase();
-        const num = doc.number.toLowerCase();
-        const matchesSearch = name.includes(searchTerm.toLowerCase()) || num.includes(searchTerm.toLowerCase());
-        const matchesStatus = statusFilter === 'ALL' || doc.status === statusFilter;
-        return matchesSearch && matchesStatus;
+        const clientName = getClientName(doc.clientId).toLowerCase();
+        const docNumber = doc.number.toLowerCase();
+        const docStatus = doc.status.toLowerCase();
+        
+        // La búsqueda por texto ahora incluye nombre, número y estado
+        const matchesSearch = 
+          clientName.includes(searchLower) || 
+          docNumber.includes(searchLower) || 
+          docStatus.includes(searchLower);
+          
+        const matchesStatusDropdown = statusFilter === 'ALL' || doc.status === statusFilter;
+        
+        return matchesSearch && matchesStatusDropdown;
       });
   }, [documents, type, searchTerm, statusFilter, clients]);
 
@@ -177,8 +186,34 @@ const DocumentList: React.FC<DocumentListProps> = ({
         </button>
       </div>
 
-      <div className="bg-white p-5 rounded-[32px] shadow-sm border border-gray-100">
-        <input type="text" placeholder="Buscar documento o cliente..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-6 pr-4 py-3 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm" />
+      <div className="bg-white p-5 rounded-[32px] shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4">
+        <div className="relative flex-1">
+          <input 
+            type="text" 
+            placeholder="Buscar por número, cliente o estado (Pagado, Pendiente...)" 
+            value={searchTerm} 
+            onChange={e => setSearchTerm(e.target.value)} 
+            className="w-full pl-6 pr-4 py-3 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm" 
+          />
+        </div>
+        <div className="flex gap-2">
+          <select 
+            value={statusFilter} 
+            onChange={e => setStatusFilter(e.target.value as any)}
+            className="px-4 py-3 bg-gray-50 rounded-2xl font-black text-[10px] uppercase outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="ALL">Todos los Estados</option>
+            {Object.values(DocumentStatus).map(status => (
+              <option key={status} value={status}>{status}</option>
+            ))}
+          </select>
+          <button 
+            onClick={() => {setSearchTerm(''); setStatusFilter('ALL');}}
+            className="px-4 py-3 bg-slate-100 text-slate-500 rounded-2xl text-[10px] font-black uppercase hover:bg-slate-200 transition-colors"
+          >
+            Limpiar
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:hidden">

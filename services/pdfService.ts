@@ -1,228 +1,224 @@
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Document, Client, DocumentType, AppSettings, PdfTemplate } from '../types';
+import { Document, Client, Product, DocumentType, AppSettings, Expense, DocumentStatus } from '../types';
 
-// Función auxiliar para generar el objeto jsPDF
+const formatCurrencyHelper = (amount: number, currency: string) => {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: currency,
+    minimumFractionDigits: 0
+  }).format(amount);
+};
+
+const generatePdfHeader = (pdf: jsPDF, title: string, settings: AppSettings, startDate?: string, endDate?: string) => {
+  pdf.setFillColor(30, 41, 59); // Slate 800
+  pdf.rect(0, 0, 210, 40, 'F');
+  
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(20);
+  pdf.text(title, 15, 18);
+  
+  pdf.setFontSize(9);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(settings.companyName.toUpperCase(), 15, 26);
+  pdf.text(`NIT: ${settings.companyId}`, 15, 31);
+  
+  if (startDate && endDate) {
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`PERIODO: ${startDate} al ${endDate}`, 195, 22, { align: 'right' });
+  }
+  
+  pdf.setTextColor(30, 41, 59);
+};
+
 const generatePdfBlob = (doc: Document, client: Client | undefined, settings: AppSettings): jsPDF => {
-  const template = settings.pdfTemplate || PdfTemplate.PROFESSIONAL;
-  const isTicket = template === PdfTemplate.COMPACT_TICKET;
+  const isTicket = doc.isPOS;
   const isCollection = doc.type === DocumentType.ACCOUNT_COLLECTION;
   
   const pdf = isTicket 
-    ? new jsPDF({ unit: 'mm', format: [80, 200] }) 
+    ? new jsPDF({ unit: 'mm', format: [80, 250] }) 
     : new jsPDF();
     
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: settings.currency,
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
+  const formatCurrency = (amount: number) => formatCurrencyHelper(amount, settings.currency);
 
   const colors = {
-    primary: isCollection ? [124, 58, 237] : [37, 99, 235], // Violeta para Cobros, Azul para Facturas
+    primary: isCollection ? [124, 58, 237] : [37, 99, 235],
+    secondary: [241, 245, 249],
     text: [30, 41, 59],
     lightText: [100, 116, 139],
-    line: [200, 200, 200]
+    white: [255, 255, 255]
   };
 
-  // --- DISEÑO ESPECIAL PARA CUENTA DE COBRO ---
-  if (isCollection && !isTicket) {
-    // Título Central
+  if (isTicket) {
+    // --- DISEÑO TICKET POS (80mm) ---
     pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(22);
-    pdf.text('CUENTA DE COBRO', 105, 20, { align: 'center' });
-
-    // No. y Fecha
     pdf.setFontSize(10);
-    pdf.text(`No.: ${doc.number}`, 15, 30);
-    pdf.line(22, 30.5, 60, 30.5); // Línea para No.
+    pdf.text(settings.companyName.toUpperCase(), 40, 10, { align: 'center' });
     
-    pdf.text(`Fecha: ${doc.date.split('-').reverse().join(' / ')}`, 75, 30);
-    pdf.line(88, 30.5, 120, 30.5); // Línea para Fecha
-
-    // 1. DATOS DEL COBRADOR
-    let currentY = 40;
-    pdf.setFillColor(colors.primary[0], colors.primary[1], colors.primary[2]);
-    pdf.rect(15, currentY, 180, 6, 'F');
-    pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(9);
-    pdf.text('DATOS DEL COBRADOR', 17, currentY + 4.5);
+    pdf.setFontSize(7);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`NIT: ${settings.companyId}`, 40, 14, { align: 'center' });
+    pdf.text(settings.companyAddress, 40, 17, { align: 'center' });
     
-    pdf.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-    currentY += 12;
-    pdf.text(`Nombre / Razón Social: ${settings.companyName}`, 15, currentY);
-    pdf.line(55, currentY + 0.5, 140, currentY + 0.5);
+    pdf.setLineWidth(0.1);
+    pdf.line(5, 20, 75, 20);
     
-    currentY += 7;
-    pdf.text(`Documento / NIT: ${settings.companyId}`, 15, currentY);
-    pdf.line(45, currentY + 0.5, 100, currentY + 0.5);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(`${doc.type} No. ${doc.number}`, 40, 25, { align: 'center' });
+    
+    pdf.setFontSize(7);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`Fecha: ${doc.date}`, 5, 30);
+    
+    if (client) {
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('CLIENTE:', 5, 35);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(client.name.substring(0, 35), 5, 39);
+      pdf.text(`ID/NIT: ${client.taxId}`, 5, 43);
+    }
+    
+    autoTable(pdf, {
+      startY: client ? 55 : 35,
+      head: [['Descripción', 'Total']],
+      body: doc.items.map(i => [
+        `${i.description}\n${i.quantity} x ${formatCurrency(i.unitPrice)}`,
+        formatCurrency(i.quantity * i.unitPrice)
+      ]),
+      theme: 'plain',
+      styles: { fontSize: 7, cellPadding: 1, textAlpha: 0.8 },
+      headStyles: { fontStyle: 'bold', borderBottom: { lineWidth: 0.1 } },
+      columnStyles: { 1: { halign: 'right' } },
+      margin: { left: 5, right: 5 }
+    });
 
-    currentY += 7;
-    pdf.text(`Dirección: ${settings.companyAddress}`, 15, currentY);
-    pdf.line(32, currentY + 0.5, 140, currentY + 0.5);
-
-    currentY += 7;
-    pdf.text(`Teléfono: ${client?.phone || 'N/A'}`, 15, currentY); // Usando teléfono del sistema si aplica
-    pdf.line(30, currentY + 0.5, 75, currentY + 0.5);
-    pdf.text(`Correo: ${settings.companyName.includes('@') ? settings.companyName : ''}`, 80, currentY);
-    pdf.line(93, currentY + 0.5, 160, currentY + 0.5);
-
-    // 2. DATOS DEL CLIENTE
-    currentY += 12;
-    pdf.setFillColor(colors.primary[0], colors.primary[1], colors.primary[2]);
-    pdf.rect(15, currentY, 180, 6, 'F');
-    pdf.setTextColor(255, 255, 255);
-    pdf.text('DATOS DEL CLIENTE', 17, currentY + 4.5);
-
-    pdf.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-    currentY += 12;
-    pdf.text(`Nombre / Razón Social: ${client?.name || '___________________'}`, 15, currentY);
-    pdf.line(55, currentY + 0.5, 140, currentY + 0.5);
-
-    currentY += 7;
-    pdf.text(`Documento / NIT: ${client?.taxId || '___________________'}`, 15, currentY);
-    pdf.line(45, currentY + 0.5, 100, currentY + 0.5);
-
-    currentY += 7;
-    pdf.text(`Dirección: ${client?.address || '___________________'}`, 15, currentY);
-    pdf.line(32, currentY + 0.5, 140, currentY + 0.5);
-
-    // 3. CONCEPTO
-    currentY += 12;
-    pdf.setFillColor(colors.primary[0], colors.primary[1], colors.primary[2]);
-    pdf.rect(15, currentY, 180, 6, 'F');
-    pdf.setTextColor(255, 255, 255);
-    pdf.text('CONCEPTO DEL COBRO', 17, currentY + 4.5);
-
-    // 4. DETALLE DEL VALOR (TABLA)
-    currentY += 12;
-    pdf.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-    pdf.setFillColor(colors.primary[0], colors.primary[1], colors.primary[2]);
-    pdf.rect(15, currentY, 180, 6, 'F');
-    pdf.setTextColor(255, 255, 255);
-    pdf.text('DETALLE DEL VALOR', 17, currentY + 4.5);
-
+    const finalY = (pdf as any).lastAutoTable.finalY + 5;
     const subtotal = doc.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
     const tax = subtotal * (doc.taxRate / 100);
-    const total = subtotal + tax - (subtotal * ((doc.withholdingRate || 0) / 100));
+    const total = subtotal + tax;
 
-    autoTable(pdf, {
-      startY: currentY + 8,
-      head: [['Concepto', 'Valor']],
-      body: [
-        ...doc.items.map(i => [i.description, formatCurrency(i.quantity * i.unitPrice)]),
-        ['TOTAL A PAGAR', formatCurrency(total)]
-      ],
-      headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
-      styles: { fontSize: 9, cellPadding: 3 },
-      columnStyles: { 1: { halign: 'right', fontStyle: 'bold', minCellWidth: 40 } },
-      margin: { left: 15, right: 15 },
-      theme: 'grid'
-    });
-
-    currentY = (pdf as any).lastAutoTable.finalY + 12;
-
-    // 5. FORMA DE PAGO
-    pdf.setFillColor(colors.primary[0], colors.primary[1], colors.primary[2]);
-    pdf.rect(15, currentY, 180, 6, 'F');
-    pdf.setTextColor(255, 255, 255);
-    pdf.text('FORMA DE PAGO', 17, currentY + 4.5);
-
-    pdf.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-    currentY += 10;
-    const isEfectivo = doc.paymentMethod === 'Efectivo';
-    const isTransfer = !isEfectivo;
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('TOTAL A PAGAR:', 5, finalY);
+    pdf.text(formatCurrency(total), 75, finalY, { align: 'right' });
     
-    pdf.rect(15, currentY - 3, 3, 3); // Check Efectivo
-    if (isEfectivo) pdf.text('X', 15.5, currentY - 0.5);
-    pdf.text('Efectivo', 20, currentY);
+    // QR de validación en Ticket
+    const qrText = `https://facturapro.app/v/${doc.id}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrText)}`;
+    try { pdf.addImage(qrUrl, 'PNG', 30, finalY + 10, 20, 20); } catch(e) {}
 
-    pdf.rect(40, currentY - 3, 3, 3); // Check Transfer
-    if (isTransfer) pdf.text('X', 40.5, currentY - 0.5);
-    pdf.text('Transferencia', 45, currentY);
-
-    pdf.text('Entidad bancaria: ________________________________', 15, currentY + 7);
-    pdf.text(`Cuenta No.: ${doc.notes.includes('cuenta') ? 'Ver notas' : '________________'}`, 15, currentY + 14);
-    pdf.text('Tipo:  [ ] Ahorros  [ ] Corriente', 80, currentY + 14);
-
-    // 6. DECLARACIÓN Y FIRMAS
-    currentY += 25;
-    pdf.setFontSize(8);
-    pdf.text('Declaro que el valor aquí cobrado corresponde a un servicio efectivamente prestado o producto entregado.', 15, currentY);
-
-    currentY += 20;
-    pdf.line(15, currentY, 80, currentY);
-    pdf.text('Firma del cobrador', 15, currentY + 5);
-
-    pdf.line(110, currentY, 175, currentY);
-    pdf.text('Firma del cliente', 110, currentY + 5);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(6);
+    pdf.text('Gracias por su confianza', 40, finalY + 35, { align: 'center' });
 
   } else {
-    // --- LÓGICA ORIGINAL PARA FACTURAS Y TICKETS ---
-    if (template === PdfTemplate.PROFESSIONAL) {
-      pdf.setFillColor(colors.primary[0], colors.primary[1], colors.primary[2]);
-      pdf.rect(0, 0, 210, 45, 'F');
-      pdf.setTextColor(255, 255, 255);
-      const logo = doc.logo || settings.logo;
-      if (logo) pdf.addImage(logo, 'PNG', 15, 8, 28, 28);
-      pdf.setFontSize(18);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(settings.companyName, 50, 20);
-      pdf.setFontSize(9);
-      pdf.text(`NIT: ${settings.companyId}`, 50, 26);
-      pdf.text(settings.companyAddress, 50, 31);
-      pdf.setFontSize(16);
-      pdf.text(doc.type, 195, 20, { align: 'right' });
-      pdf.setFontSize(10);
-      pdf.text(`No. ${doc.number}`, 195, 26, { align: 'right' });
-    } else if (isTicket) {
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(settings.companyName, 40, 10, { align: 'center' });
-      pdf.setFontSize(8);
-      pdf.text(doc.type + ' ' + doc.number, 40, 15, { align: 'center' });
-    } else {
-      pdf.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
-      pdf.setFontSize(22);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(doc.type, 15, 25);
-      pdf.setFontSize(10);
-      pdf.text(`No. ${doc.number}`, 15, 32);
+    // --- DISEÑO CARTA PROFESIONAL ---
+    pdf.setFillColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    pdf.rect(0, 0, 210, 45, 'F');
+    if (settings.logo) {
+      try { pdf.addImage(settings.logo, 'PNG', 15, 10, 25, 25); } catch (e) {}
     }
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(22);
+    pdf.text(settings.companyName.toUpperCase(), 45, 22);
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`NIT: ${settings.companyId}`, 45, 28);
+    pdf.text(`Dir: ${settings.companyAddress}`, 45, 33);
 
-    const startY = isTicket ? 25 : 60;
+    pdf.setFillColor(255, 255, 255);
+    pdf.roundedRect(145, 10, 50, 25, 3, 3, 'F');
+    pdf.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(doc.type, 170, 18, { align: 'center' });
+    pdf.setFontSize(14);
+    pdf.text(doc.number, 170, 27, { align: 'center' });
+
     pdf.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-    if (client) {
-      pdf.setFontSize(9);
-      pdf.text(`CLIENTE: ${client.name}`, 15, startY);
-    }
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('INFORMACIÓN DEL CLIENTE', 15, 60);
+    pdf.setDrawColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    pdf.setLineWidth(0.8);
+    pdf.line(15, 62, 50, 62);
 
-    const tableHeaders = isTicket ? [['Item', 'Total']] : [['Descripción', 'Cant.', 'Precio', 'Subtotal']];
-    const tableData = doc.items.map(i => isTicket 
-      ? [i.description, formatCurrency(i.quantity * i.unitPrice)]
-      : [i.description, i.quantity.toString(), formatCurrency(i.unitPrice), formatCurrency(i.quantity * i.unitPrice)]
-    );
+    pdf.setFontSize(9);
+    const clientY = 70;
+    if (client) {
+      pdf.setFont('helvetica', 'bold'); pdf.text('Nombre:', 15, clientY);
+      pdf.setFont('helvetica', 'normal'); pdf.text(client.name || 'Consumidor Final', 40, clientY);
+      pdf.setFont('helvetica', 'bold'); pdf.text('NIT/CC:', 15, clientY + 7);
+      pdf.setFont('helvetica', 'normal'); pdf.text(client.taxId || 'N/A', 40, clientY + 7);
+      pdf.setFont('helvetica', 'bold'); pdf.text('Dirección:', 15, clientY + 14);
+      pdf.setFont('helvetica', 'normal'); pdf.text(client.address || 'N/A', 40, clientY + 14);
+      pdf.setFont('helvetica', 'bold'); pdf.text('Teléfono:', 115, clientY);
+      pdf.setFont('helvetica', 'normal'); pdf.text(client.phone || 'N/A', 140, clientY);
+      pdf.setFont('helvetica', 'bold'); pdf.text('Fecha:', 115, clientY + 14);
+      pdf.setFont('helvetica', 'normal'); pdf.text(doc.date, 140, clientY + 14);
+    }
 
     autoTable(pdf, {
-      startY: startY + 10,
-      head: tableHeaders,
-      body: tableData,
-      headStyles: { fillColor: colors.primary },
-      margin: { left: isTicket ? 5 : 15, right: isTicket ? 5 : 15 }
+      startY: 100,
+      head: [['Descripción', 'Cant.', 'Precio Unit.', 'Total']],
+      body: doc.items.map(i => [
+        i.description,
+        i.quantity.toString(),
+        formatCurrency(i.unitPrice),
+        formatCurrency(i.quantity * i.unitPrice)
+      ]),
+      headStyles: { fillColor: colors.primary, textColor: colors.white, fontStyle: 'bold', fontSize: 10 },
+      styles: { fontSize: 9, cellPadding: 5 },
+      columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+      alternateRowStyles: { fillColor: colors.secondary },
+      margin: { left: 15, right: 15 }
     });
 
-    const finalY = (pdf as any).lastAutoTable.finalY + 10;
+    let finalY = (pdf as any).lastAutoTable.finalY + 10;
     const subtotal = doc.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
-    const total = subtotal + (subtotal * (doc.taxRate / 100));
+    const tax = subtotal * (doc.taxRate / 100);
+    const total = subtotal + tax;
 
+    pdf.setFillColor(colors.text[0], colors.text[1], colors.text[2]);
+    pdf.roundedRect(130, finalY, 65, 35, 3, 3, 'F');
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(8);
+    pdf.text('SUBTOTAL:', 135, finalY + 10);
+    pdf.text(formatCurrency(subtotal), 190, finalY + 10, { align: 'right' });
+    pdf.text(`IVA (${doc.taxRate}%):`, 135, finalY + 18);
+    pdf.text(formatCurrency(tax), 190, finalY + 18, { align: 'right' });
     pdf.setFontSize(12);
     pdf.setFont('helvetica', 'bold');
-    pdf.text(`TOTAL: ${formatCurrency(total)}`, isTicket ? 40 : 195, finalY, { align: isTicket ? 'center' : 'right' });
-  }
+    pdf.text('TOTAL:', 135, finalY + 28);
+    pdf.text(formatCurrency(total), 190, finalY + 28, { align: 'right' });
+    
+    if (doc.notes) {
+      pdf.setTextColor(colors.lightText[0], colors.lightText[1], colors.lightText[2]);
+      pdf.setFontSize(8);
+      pdf.text('OBSERVACIONES:', 15, finalY + 5);
+      const splitNotes = pdf.splitTextToSize(doc.notes, 100);
+      pdf.text(splitNotes, 15, finalY + 12);
+    }
 
+    // Firma Digital si existe
+    if (doc.signature) {
+      finalY = Math.max(finalY + 45, 250);
+      pdf.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+      pdf.setDrawColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+      pdf.line(15, finalY, 75, finalY);
+      pdf.setFontSize(8);
+      pdf.text('FIRMA AUTORIZADA / CLIENTE', 15, finalY + 5);
+      try { pdf.addImage(doc.signature, 'PNG', 20, finalY - 25, 40, 20); } catch(e) {}
+    }
+
+    // QR de validación automático
+    const qrText = `FacturaPro: ${settings.companyName} | Doc: ${doc.number} | Total: ${formatCurrency(total)}`;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrText)}`;
+    try { pdf.addImage(qrUrl, 'PNG', 160, finalY + 5, 25, 25); } catch(e) {}
+  }
   return pdf;
 };
 
@@ -236,24 +232,126 @@ export const exportToPDF = (doc: Document, client: Client | undefined, settings:
   }
 };
 
-export const shareViaWhatsApp = async (doc: Document, client: Client | undefined, settings: AppSettings, customPhone?: string) => {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: settings.currency,
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
+export const exportClientsReport = (clients: Client[], settings: AppSettings) => {
+  const pdf = new jsPDF();
+  generatePdfHeader(pdf, 'REPORTE DE CLIENTES', settings);
+  autoTable(pdf, {
+    startY: 45,
+    head: [['Nombre / Empresa', 'NIT / CC', 'Email', 'Teléfono', 'Ciudad']],
+    body: clients.map(c => [c.name, c.taxId, c.email, c.phone, c.city]),
+    headStyles: { fillColor: [37, 99, 235] },
+    styles: { fontSize: 8 }
+  });
+  window.open(pdf.output('bloburl'), '_blank');
+};
 
+export const exportProductsReport = (products: Product[], settings: AppSettings) => {
+  const pdf = new jsPDF();
+  generatePdfHeader(pdf, 'REPORTE DE INVENTARIO', settings);
+  autoTable(pdf, {
+    startY: 45,
+    head: [['Descripción', 'SKU', 'Categoría', 'P. Venta', 'Rentabilidad (%)', 'Stock']],
+    body: products.map(p => {
+      const margin = p.salePrice > 0 ? ((p.salePrice - p.purchasePrice) / p.salePrice * 100).toFixed(1) : '0';
+      return [
+        p.description, 
+        p.sku || 'N/A', 
+        p.category || 'General', 
+        formatCurrencyHelper(p.salePrice, settings.currency), 
+        `${margin}%`,
+        p.stock || 0
+      ];
+    }),
+    headStyles: { fillColor: [5, 150, 105] },
+    styles: { fontSize: 8 },
+    columnStyles: { 3: { halign: 'right' }, 4: { halign: 'center' }, 5: { halign: 'center' } }
+  });
+  window.open(pdf.output('bloburl'), '_blank');
+};
+
+export const exportSalesReport = (documents: Document[], clients: Client[], settings: AppSettings, startDate: string, endDate: string) => {
+  const filtered = documents.filter(d => 
+    (d.type === DocumentType.INVOICE || d.type === DocumentType.ACCOUNT_COLLECTION) &&
+    d.date >= startDate && d.date <= endDate
+  );
+  if (filtered.length === 0) {
+    alert("No hay ventas registradas en el rango seleccionado.");
+    return;
+  }
+  const pdf = new jsPDF();
+  generatePdfHeader(pdf, 'REPORTE DE VENTAS', settings, startDate, endDate);
+  const tableData = filtered.map(d => {
+    const client = clients.find(c => c.id === d.clientId);
+    const subtotal = d.items.reduce((acc, i) => acc + (i.quantity * i.unitPrice), 0);
+    const tax = subtotal * (d.taxRate / 100);
+    const total = subtotal + tax;
+    return [d.date, d.number, client?.name || 'Cliente Final', d.status, formatCurrencyHelper(total, settings.currency)];
+  });
+  autoTable(pdf, {
+    startY: 45,
+    head: [['Fecha', 'Ref', 'Cliente', 'Estado', 'Total']],
+    body: tableData,
+    headStyles: { fillColor: [37, 99, 235] },
+    styles: { fontSize: 8 },
+    columnStyles: { 4: { halign: 'right' } }
+  });
+  const totalSales = filtered.reduce((acc, d) => {
+    const sub = d.items.reduce((iAcc, i) => iAcc + (i.quantity * i.unitPrice), 0);
+    return acc + sub + (sub * (d.taxRate / 100));
+  }, 0);
+  pdf.setFont('helvetica', 'bold').setFontSize(10);
+  pdf.text(`TOTAL VENTAS BRUTAS: ${formatCurrencyHelper(totalSales, settings.currency)}`, 15, (pdf as any).lastAutoTable.finalY + 10);
+  window.open(pdf.output('bloburl'), '_blank');
+};
+
+export const exportExpensesReport = (expenses: Expense[], settings: AppSettings, startDate: string, endDate: string) => {
+  const filtered = expenses.filter(e => e.date >= startDate && e.date <= endDate);
+  if (filtered.length === 0) {
+    alert("No hay gastos registrados en el rango seleccionado.");
+    return;
+  }
+  const pdf = new jsPDF();
+  generatePdfHeader(pdf, 'REPORTE DE GASTOS', settings, startDate, endDate);
+  autoTable(pdf, {
+    startY: 45,
+    head: [['Fecha', 'Descripción', 'Categoría', 'Valor']],
+    body: filtered.map(e => [e.date, e.description, e.category, formatCurrencyHelper(e.amount, settings.currency)]),
+    headStyles: { fillColor: [225, 29, 72] },
+    styles: { fontSize: 8 },
+    columnStyles: { 3: { halign: 'right' } }
+  });
+  const totalExpenses = filtered.reduce((acc, e) => acc + e.amount, 0);
+  pdf.setFont('helvetica', 'bold').setFontSize(10);
+  pdf.text(`TOTAL EGRESOS: ${formatCurrencyHelper(totalExpenses, settings.currency)}`, 15, (pdf as any).lastAutoTable.finalY + 10);
+  window.open(pdf.output('bloburl'), '_blank');
+};
+
+export const exportToCSV = (data: any[], fileName: string) => {
+  if (data.length === 0) return;
+  const headers = Object.keys(data[0]);
+  const csvContent = [
+    headers.join(','),
+    ...data.map(row => headers.map(header => {
+      const val = row[header] === null || row[header] === undefined ? '' : row[header];
+      return `"${String(val).replace(/"/g, '""')}"`;
+    }).join(','))
+  ].join('\n');
+  const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = window.document.createElement('a');
+  link.href = window.URL.createObjectURL(blob);
+  link.download = `${fileName}.csv`;
+  link.click();
+};
+
+export const shareViaWhatsApp = async (doc: Document, client: Client | undefined, settings: AppSettings, customPhone?: string) => {
+  const formatCurrency = (amount: number) => formatCurrencyHelper(amount, settings.currency);
   const subtotal = doc.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
   const total = subtotal + (subtotal * (doc.taxRate / 100));
   const fileName = `${doc.type}_${doc.number}.pdf`.replace(/\s+/g, '_');
-
   try {
     const pdf = generatePdfBlob(doc, client, settings);
     const pdfBlob = pdf.output('blob');
     const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
-
     if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
       await navigator.share({
         files: [pdfFile],
@@ -262,17 +360,15 @@ export const shareViaWhatsApp = async (doc: Document, client: Client | undefined
       });
     } else {
       const cleanPhone = (customPhone || client?.phone || '').replace(/\D/g, '');
-      const message = `Hola, te envío mi ${doc.type} No. ${doc.number} por un total de *${formatCurrency(total)}*. El archivo PDF se ha descargado en tu dispositivo para que puedas adjuntarlo.`;
+      const message = `Hola, te envío mi ${doc.type} No. ${doc.number} por un total de *${formatCurrency(total)}*.`;
       const whatsappUrl = cleanPhone 
         ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`
         : `https://wa.me/?text=${encodeURIComponent(message)}`;
-      
       pdf.save(fileName);
       window.open(whatsappUrl, '_blank');
     }
   } catch (err) {
-    console.error("Error al compartir:", err);
     const cleanPhone = (customPhone || client?.phone || '').replace(/\D/g, '');
-    window.open(`https://wa.me/${cleanPhone}?text=Hola, te envío mi ${doc.type} No. ${doc.number}`, '_blank');
+    window.open(`https://wa.me/${cleanPhone}?text=Factura No. ${doc.number}`, '_blank');
   }
 };

@@ -75,10 +75,13 @@ const ClientManager: React.FC<ClientManagerProps> = ({ user, clients, onUpdateCl
     const data = await extractClientDataFromId(base64);
     
     if (data.name) {
+      // Sanitizar taxId para eliminar puntos, comas o cualquier caracter no numérico
+      const cleanTaxId = (data.taxId || '').replace(/\D/g, '');
+      
       setEditingClient({
         ...editingClient,
         name: data.name || editingClient.name,
-        taxId: data.taxId || editingClient.taxId,
+        taxId: cleanTaxId || editingClient.taxId,
         address: data.address || editingClient.address,
         city: data.city || editingClient.city
       });
@@ -163,13 +166,13 @@ const ClientManager: React.FC<ClientManagerProps> = ({ user, clients, onUpdateCl
               <button onClick={() => setIsModalOpen(false)} className="text-white/60 hover:text-white text-2xl">✕</button>
             </div>
 
-            <form onSubmit={handleSave} className="p-8 space-y-6">
+            <form onSubmit={handleSave} className="p-8 space-y-6 bg-white dark:bg-slate-950">
               
               {!isCameraOpen ? (
                 <button 
                   type="button" 
                   onClick={startCamera}
-                  className="w-full p-4 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-dashed border-emerald-200 dark:border-emerald-800 rounded-3xl flex items-center justify-center gap-3 text-emerald-600 dark:text-emerald-400 font-black text-xs uppercase tracking-widest hover:bg-emerald-100 transition-all"
+                  className="w-full p-4 bg-emerald-50 dark:bg-emerald-900/20 border-2 border-dashed border-emerald-200 dark:border-emerald-800 rounded-3xl flex items-center justify-center gap-3 text-emerald-600 dark:text-emerald-400 font-black text-xs uppercase tracking-widest hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-all"
                 >
                   <span className="text-2xl">📸</span>
                   <span>Escanear Cédula / ID con IA</span>
@@ -194,23 +197,23 @@ const ClientManager: React.FC<ClientManagerProps> = ({ user, clients, onUpdateCl
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1 ml-2">Nombre / Razón Social</label>
-                  <input required value={editingClient.name} onChange={e => setEditingClient({...editingClient, name: e.target.value})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 dark:text-white border border-gray-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="Nombre completo" />
+                  <input required value={editingClient.name} onChange={e => setEditingClient({...editingClient, name: e.target.value})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-gray-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="Nombre completo" />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1 ml-2">NIT / Identificación</label>
-                  <input required value={editingClient.taxId} onChange={e => setEditingClient({...editingClient, taxId: e.target.value})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 dark:text-white border border-gray-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ej. 123456789" />
+                  <input required value={editingClient.taxId} onChange={e => setEditingClient({...editingClient, taxId: e.target.value.replace(/\D/g, '')})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-gray-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ej. 123456789" />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1 ml-2">Email</label>
-                  <input type="email" value={editingClient.email} onChange={e => setEditingClient({...editingClient, email: e.target.value})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 dark:text-white border border-gray-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="correo@ejemplo.com" />
+                  <input type="email" value={editingClient.email} onChange={e => setEditingClient({...editingClient, email: e.target.value})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-gray-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="correo@ejemplo.com" />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1 ml-2">Teléfono</label>
-                  <input type="tel" value={editingClient.phone} onChange={e => setEditingClient({...editingClient, phone: e.target.value})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 dark:text-white border border-gray-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="57300..." />
+                  <input type="tel" value={editingClient.phone} onChange={e => setEditingClient({...editingClient, phone: e.target.value})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-gray-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="57300..." />
                 </div>
                 <div className="md:col-span-2">
                   <label className="block text-[10px] font-black text-gray-400 dark:text-slate-500 uppercase tracking-widest mb-1 ml-2">Dirección</label>
-                  <input value={editingClient.address} onChange={e => setEditingClient({...editingClient, address: e.target.value})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 dark:text-white border border-gray-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="Calle / Carrera #..." />
+                  <input value={editingClient.address} onChange={e => setEditingClient({...editingClient, address: e.target.value})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-gray-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="Calle / Carrera #..." />
                 </div>
               </div>
 

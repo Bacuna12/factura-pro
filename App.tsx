@@ -37,12 +37,9 @@ const INITIAL_SETTINGS: AppSettings = {
 };
 
 const App: React.FC = () => {
-  // Bypass de autenticación: Si no hay usuario, iniciamos con un perfil de administrador por defecto
   const [user, setUser] = useState<User | null>(() => {
     const saved = localStorage.getItem('facturapro_current_user');
     if (saved) return JSON.parse(saved);
-    
-    // Usuario temporal para saltar la interfaz de acceso
     return {
       id: 'admin-default',
       username: 'admin@facturapro.com',
@@ -99,7 +96,6 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setUser(null);
     localStorage.removeItem('facturapro_current_user');
-    // Para el bypass, si cierra sesión recargamos para que vuelva a entrar con el admin por defecto
     window.location.reload();
   };
 
@@ -115,7 +111,6 @@ const App: React.FC = () => {
         );
         return matchedItem ? { ...p, stock: (p.stock || 0) + (matchedItem.quantity * multiplier) } : p;
       });
-      localStorage.setItem('facturapro_products', JSON.stringify(updatedProducts));
       return updatedProducts;
     });
   }, []);
@@ -152,14 +147,13 @@ const App: React.FC = () => {
   const handleUpdateExpenses = (newExpenses: Expense[]) => setExpenses(newExpenses);
   const handleUpdateSettings = (newSettings: AppSettings) => setSettings(newSettings);
 
-  // La condición if (!user) ha sido omitida o el usuario siempre tiene valor por defecto
   const currentUser = user || { id: 'default', username: 'guest', name: 'Invitado', role: UserRole.ADMIN };
 
   return (
     <HashRouter>
       <Layout user={currentUser} onLogout={handleLogout} isDarkMode={isDarkMode} onToggleDarkMode={toggleDarkMode}>
         <Routes>
-          <Route path="/" element={<Dashboard user={currentUser} documents={documents} expenses={expenses} clientsCount={clients.length} settings={settings} onDeleteDoc={handleDeleteDocument} onUpdateDoc={handleSaveDocument} clients={clients} />} />
+          <Route path="/" element={<Dashboard user={currentUser} documents={documents} expenses={expenses} clientsCount={clients.length} settings={settings} onDeleteDoc={handleDeleteDocument} onUpdateDoc={handleSaveDocument} clients={clients} products={products} />} />
           <Route path="/pos" element={<POS products={products} clients={clients} settings={settings} onSaveDocument={handleSaveDocument} onUpdateClients={handleUpdateClients} />} />
           <Route path="/invoices" element={<DocumentList user={currentUser} type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
           <Route path="/invoices/new" element={<DocumentEditor key="new-invoice" type={DocumentType.INVOICE} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
@@ -170,14 +164,12 @@ const App: React.FC = () => {
           <Route path="/quotes" element={<DocumentList user={currentUser} type={DocumentType.QUOTE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
           <Route path="/quotes/new" element={<DocumentEditor key="new-quote" type={DocumentType.QUOTE} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
           <Route path="/quotes/edit/:id" element={<EditDocumentWrapper type={DocumentType.QUOTE} documents={documents} clients={clients} products={products} settings={settings} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} onDelete={handleDeleteDocument} />} />
-          
           {currentUser.role === UserRole.ADMIN && (
             <>
               <Route path="/expenses" element={<ExpenseManager expenses={expenses} onUpdateExpenses={handleUpdateExpenses} settings={settings} />} />
               <Route path="/settings" element={<Settings settings={settings} onUpdateSettings={handleUpdateSettings} onImportData={handleImportData} allData={{ documents, expenses, clients, products, settings }} />} />
             </>
           )}
-
           <Route path="/products" element={<ProductManager user={currentUser} products={products} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
           <Route path="/clients" element={<ClientManager user={currentUser} clients={clients} onUpdateClients={handleUpdateClients} />} />
           <Route path="*" element={<Navigate to="/" />} />
@@ -192,7 +184,7 @@ const EditDocumentWrapper: React.FC<{
 }> = ({ type, documents, clients, products, settings, onSave, onUpdateClients, onUpdateProducts, onDelete }) => {
   const { id } = useParams<{ id: string }>();
   const initialData = documents.find(d => d.id === id);
-  if (!initialData) return <Navigate to={type === DocumentType.INVOICE ? '/invoices' : type === DocumentType.ACCOUNT_COLLECTION ? '/collections' : '/quotes'} />;
+  if (!initialData) return <Navigate to={type === DocumentType.INVOICE ? '/invoices' : '/collections'} />;
   return <DocumentEditor key={id} type={type} clients={clients} products={products} onSave={onSave} onUpdateClients={onUpdateClients} onUpdateProducts={onUpdateProducts} settings={settings} initialData={initialData} onDelete={onDelete} />;
 };
 

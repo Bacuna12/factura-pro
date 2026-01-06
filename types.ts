@@ -98,6 +98,7 @@ export interface Document {
   payments?: Payment[];
   paymentMethod?: string;
   isPOS?: boolean;
+  signature?: string; // Firma digital en base64
 }
 
 export interface AppSettings {
