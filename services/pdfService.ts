@@ -1,7 +1,8 @@
 
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Document, Client, Product, DocumentType, AppSettings, Expense, DocumentStatus } from '../types';
+// Added Product to the imports
+import { Document, Client, DocumentType, AppSettings, Expense, Product } from '../types';
 
 type ColorTuple = [number, number, number];
 
@@ -55,7 +56,6 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
   };
 
   if (isTicket) {
-    // --- DISEÑO TICKET POS (80mm) ---
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(10);
     pdf.text(settings.companyName.toUpperCase(), 40, 10, { align: 'center' });
@@ -106,7 +106,6 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     pdf.text('TOTAL A PAGAR:', 5, finalY);
     pdf.text(formatCurrency(total), 75, finalY, { align: 'right' });
     
-    // QR de validación en Ticket
     const qrText = `https://facturapro.app/v/${doc.id}`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrText)}`;
     try { pdf.addImage(qrUrl, 'PNG', 30, finalY + 10, 20, 20); } catch(e) {}
@@ -116,7 +115,6 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     pdf.text('Gracias por su confianza', 40, finalY + 35, { align: 'center' });
 
   } else {
-    // --- DISEÑO CARTA PROFESIONAL ---
     const primary = colors.primary;
     pdf.setFillColor(primary[0], primary[1], primary[2]);
     pdf.rect(0, 0, 210, 45, 'F');
@@ -174,10 +172,10 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
         formatCurrency(i.unitPrice),
         formatCurrency(i.quantity * i.unitPrice)
       ]),
-      headStyles: { fillColor: primary, textColor: colors.white, fontStyle: 'bold', fontSize: 10 },
+      headStyles: { fillColor: primary as [number, number, number], textColor: colors.white as [number, number, number], fontStyle: 'bold', fontSize: 10 },
       styles: { fontSize: 9, cellPadding: 5 },
       columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
-      alternateRowStyles: { fillColor: colors.secondary },
+      alternateRowStyles: { fillColor: colors.secondary as [number, number, number] },
       margin: { left: 15, right: 15 }
     });
 
@@ -208,7 +206,6 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
       pdf.text(splitNotes, 15, finalY + 12);
     }
 
-    // Firma Digital si existe
     if (doc.signature) {
       finalY = Math.max(finalY + 45, 250);
       pdf.setTextColor(textCol[0], textCol[1], textCol[2]);
@@ -219,7 +216,6 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
       try { pdf.addImage(doc.signature, 'PNG', 20, finalY - 25, 40, 20); } catch(e) {}
     }
 
-    // QR de validación automático
     const qrText = `FacturaPro: ${settings.companyName} | Doc: ${doc.number} | Total: ${formatCurrency(total)}`;
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrText)}`;
     try { pdf.addImage(qrUrl, 'PNG', 160, finalY + 5, 25, 25); } catch(e) {}

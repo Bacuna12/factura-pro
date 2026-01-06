@@ -11,7 +11,7 @@ interface ProductManagerProps {
   settings: AppSettings;
 }
 
-const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProducts, settings }) => {
+const ProductManager: React.FC<ProductManagerProps> = ({ user, products, onUpdateProducts, settings }) => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);

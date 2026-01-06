@@ -10,7 +10,6 @@ import ProductManager from './components/ProductManager';
 import ExpenseManager from './components/ExpenseManager';
 import POS from './components/POS';
 import Settings from './components/Settings';
-import Auth from './components/Auth';
 import { database } from './services/databaseService';
 import { Document, Client, Product, DocumentType, AppSettings, Expense, User, BackupData, UserRole } from './types';
 
@@ -36,16 +35,24 @@ const INITIAL_SETTINGS: AppSettings = {
   defaultTaxRate: 19
 };
 
+const safeParse = (key: string, defaultValue: any) => {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : defaultValue;
+  } catch (e) {
+    console.warn(`Error parsing ${key} from localStorage:`, e);
+    return defaultValue;
+  }
+};
+
 const App: React.FC = () => {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('facturapro_current_user');
-    if (saved) return JSON.parse(saved);
-    return {
+    return safeParse('facturapro_current_user', {
       id: 'admin-default',
       username: 'admin@facturapro.com',
       name: 'Administrador',
       role: UserRole.ADMIN
-    };
+    });
   });
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -64,34 +71,17 @@ const App: React.FC = () => {
 
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
   
-  const [documents, setDocuments] = useState<Document[]>(() => {
-    const saved = localStorage.getItem('facturapro_docs');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [expenses, setExpenses] = useState<Expense[]>(() => JSON.parse(localStorage.getItem('facturapro_expenses') || '[]'));
-  const [clients, setClients] = useState<Client[]>(() => {
-    const saved = localStorage.getItem('facturapro_clients');
-    return saved ? JSON.parse(saved) : INITIAL_CLIENTS;
-  });
-  const [products, setProducts] = useState<Product[]>(() => JSON.parse(localStorage.getItem('facturapro_products') || '[]'));
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    const saved = localStorage.getItem('facturapro_settings');
-    return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
-  });
+  const [documents, setDocuments] = useState<Document[]>(() => safeParse('facturapro_docs', []));
+  const [expenses, setExpenses] = useState<Expense[]>(() => safeParse('facturapro_expenses', []));
+  const [clients, setClients] = useState<Client[]>(() => safeParse('facturapro_clients', INITIAL_CLIENTS));
+  const [products, setProducts] = useState<Product[]>(() => safeParse('facturapro_products', []));
+  const [settings, setSettings] = useState<AppSettings>(() => safeParse('facturapro_settings', INITIAL_SETTINGS));
 
   useEffect(() => { localStorage.setItem('facturapro_docs', JSON.stringify(documents)); }, [documents]);
   useEffect(() => { localStorage.setItem('facturapro_expenses', JSON.stringify(expenses)); }, [expenses]);
   useEffect(() => { localStorage.setItem('facturapro_clients', JSON.stringify(clients)); }, [clients]);
   useEffect(() => { localStorage.setItem('facturapro_products', JSON.stringify(products)); }, [products]);
   useEffect(() => { localStorage.setItem('facturapro_settings', JSON.stringify(settings)); }, [settings]);
-
-  const handleLogin = (loggedUser: User, customSettings?: AppSettings) => {
-    setUser(loggedUser);
-    localStorage.setItem('facturapro_current_user', JSON.stringify(loggedUser));
-    if (customSettings) {
-      setSettings(customSettings);
-    }
-  };
 
   const handleLogout = () => {
     setUser(null);

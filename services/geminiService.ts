@@ -5,23 +5,22 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const extractClientDataFromId = async (base64Image: string): Promise<{name: string, taxId: string, address: string, city: string}> => {
   try {
+    // Correct way to use multiple parts for vision tasks
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: [
-        {
-          parts: [
-            {
-              inlineData: {
-                mimeType: "image/jpeg",
-                data: base64Image
-              }
-            },
-            {
-              text: "Extrae los datos de este documento de identidad para el registro de un cliente. Devuelve estrictamente un JSON con: name (Nombre completo), taxId (Número de identificación/cédula/NIT, este campo debe contener SOLO NÚMEROS, sin puntos, comas, guiones o espacios), address (Dirección si aparece), city (Ciudad si aparece). Si no encuentras un campo, deja el string vacío."
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: base64Image
             }
-          ]
-        }
-      ],
+          },
+          {
+            text: "Extrae los datos de este documento de identidad para el registro de un cliente. Devuelve estrictamente un JSON con: name (Nombre completo), taxId (Número de identificación/cédula/NIT, este campo debe contener SOLO NÚMEROS, sin puntos, comas, guiones o espacios), address (Dirección si aparece), city (Ciudad si aparece). Si no encuentras un campo, deja el string vacío."
+          }
+        ]
+      },
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -37,7 +36,8 @@ export const extractClientDataFromId = async (base64Image: string): Promise<{nam
       }
     });
     
-    return JSON.parse(response.text || "{}");
+    // Accessing .text as a property, not a method
+    return JSON.parse(response.text?.trim() || "{}");
   } catch (error) {
     console.error("Error al extraer datos con Gemini:", error);
     return { name: "", taxId: "", address: "", city: "" };
@@ -46,10 +46,14 @@ export const extractClientDataFromId = async (base64Image: string): Promise<{nam
 
 export const generateProfessionalDescription = async (basicText: string): Promise<string> => {
   try {
+    // Direct call with text contents
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Convierte esta descripción básica de un servicio en una descripción profesional para factura en español: "${basicText}". Solo el texto mejorado.`,
-      config: { temperature: 0.7, maxOutputTokens: 200 }
+      config: { 
+        temperature: 0.7 
+        // maxOutputTokens removed to avoid mandatory thinkingBudget setting
+      }
     });
     return response.text?.trim() || basicText;
   } catch (error) {
@@ -63,7 +67,9 @@ export const generateSMSVerification = async (userName: string, code: string): P
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Genera un mensaje de texto SMS corto y profesional para ${userName} con el código de verificación: ${code}. Máximo 160 caracteres.`,
-      config: { temperature: 0.5, maxOutputTokens: 100 }
+      config: { 
+        temperature: 0.5 
+      }
     });
     return response.text?.trim() || `Tu código de FacturaPro es: ${code}`;
   } catch (error) {
@@ -89,7 +95,7 @@ export const optimizeProductListing = async (name: string): Promise<{description
         }
       }
     });
-    return JSON.parse(response.text || "{}");
+    return JSON.parse(response.text?.trim() || "{}");
   } catch (error) {
     return { description: name, suggestedPrice: 0, category: "General" };
   }
@@ -100,7 +106,9 @@ export const suggestInvoiceNotes = async (type: string, amount: number, currency
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Escribe notas de agradecimiento y pago para una ${type} de ${amount} ${currency}.`,
-      config: { temperature: 0.5, maxOutputTokens: 200 }
+      config: { 
+        temperature: 0.5 
+      }
     });
     return response.text?.trim() || "";
   } catch (error) {
@@ -113,7 +121,9 @@ export const generateWelcomeEmail = async (userName: string, companyName: string
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Email de bienvenida para ${userName} de la empresa ${companyName}.`,
-      config: { temperature: 0.8, maxOutputTokens: 300 }
+      config: { 
+        temperature: 0.8 
+      }
     });
     return response.text?.trim() || `Bienvenido, ${userName}.`;
   } catch (error) {
@@ -126,7 +136,9 @@ export const generateRecoveryEmail = async (userName: string, passwordHint: stri
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Email de recuperación para ${userName}. Contraseña: ${passwordHint}.`,
-      config: { temperature: 0.4, maxOutputTokens: 200 }
+      config: { 
+        temperature: 0.4 
+      }
     });
     return response.text?.trim() || `Tu contraseña es: ${passwordHint}`;
   } catch (error) {
