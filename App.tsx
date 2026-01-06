@@ -8,6 +8,7 @@ import DocumentEditor from './components/DocumentEditor';
 import ClientManager from './components/ClientManager';
 import ProductManager from './components/ProductManager';
 import ExpenseManager from './components/ExpenseManager';
+import POS from './components/POS'; // Importado
 import Settings from './components/Settings';
 import { database } from './services/databaseService';
 import { Document, Client, Product, DocumentType, AppSettings, Expense, User, BackupData } from './types';
@@ -21,13 +22,13 @@ const DEFAULT_USER: User = {
 const INITIAL_CLIENTS: Client[] = [
   { 
     id: '1', 
-    name: 'Cliente Ejemplo', 
-    email: 'ejemplo@correo.com', 
-    taxId: '123456789', 
-    address: 'Calle Principal 123',
-    city: 'Bogotá',
-    municipality: 'Cundinamarca',
-    zipCode: '110111'
+    name: 'Consumidor Final', 
+    email: 'cliente@final.com', 
+    taxId: '222222222222', 
+    address: 'Caja Principal',
+    city: 'Ventas Directas',
+    municipality: 'General',
+    zipCode: '000000'
   },
 ];
 
@@ -65,15 +66,14 @@ const App: React.FC = () => {
 
   const handleImportData = (data: BackupData) => database.restoreDatabase(data);
 
-  // Función interna para ajustar stock de forma genérica
   const adjustStock = useCallback((items: any[], multiplier: number) => {
     setProducts(prevProducts => {
       const updatedProducts = prevProducts.map(p => {
         const matchedItem = items.find(item => 
           item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
-          (p.barcode && item.description === p.barcode)
+          (p.barcode && item.description === p.barcode) ||
+          item.id === p.id
         );
-        // Multiplier: -1 para descontar (venta), +1 para reintegrar (devolución/borrado)
         return matchedItem ? { ...p, stock: (p.stock || 0) + (matchedItem.quantity * multiplier) } : p;
       });
       localStorage.setItem('facturapro_products', JSON.stringify(updatedProducts));
@@ -87,13 +87,10 @@ const App: React.FC = () => {
       let updatedDocs;
       
       if (existingIndex >= 0) {
-        // Si estamos editando o registrando pago, simplemente actualizamos el documento
         updatedDocs = [...prevDocs];
         updatedDocs[existingIndex] = doc;
       } else {
         updatedDocs = [doc, ...prevDocs];
-        
-        // Descontar stock solo si es Factura o Cuenta de Cobro NUEVA
         if (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) {
           adjustStock(doc.items, -1);
         }
@@ -106,13 +103,10 @@ const App: React.FC = () => {
 
   const handleDeleteDocument = useCallback((id: string) => {
     const docToDelete = documents.find(d => d.id === id);
-    
     if (docToDelete) {
-      // Reintegrar stock si el documento es de los que restan stock
       if (docToDelete.type === DocumentType.INVOICE || docToDelete.type === DocumentType.ACCOUNT_COLLECTION) {
         adjustStock(docToDelete.items, 1);
       }
-
       setDocuments(prev => {
         const updated = prev.filter(d => d.id !== id);
         localStorage.setItem('facturapro_docs', JSON.stringify(updated));
@@ -132,6 +126,8 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<Dashboard documents={documents} expenses={expenses} clientsCount={clients.length} settings={settings} onDeleteDoc={handleDeleteDocument} onUpdateDoc={handleSaveDocument} clients={clients} />} />
           
+          <Route path="/pos" element={<POS products={products} clients={clients} settings={settings} onSaveDocument={handleSaveDocument} />} />
+
           <Route path="/invoices" element={<DocumentList type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
           <Route path="/invoices/new" element={<DocumentEditor key="new-invoice" type={DocumentType.INVOICE} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
           <Route path="/invoices/edit/:id" element={<EditDocumentWrapper type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} onDelete={handleDeleteDocument} />} />

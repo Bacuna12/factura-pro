@@ -11,6 +11,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, user }) => {
   const navItems = [
     { path: '/', label: 'Panel', icon: '📊' },
+    { path: '/pos', label: 'Caja / POS', icon: '🛒' }, // Nuevo
     { path: '/invoices', label: 'Facturas', icon: '🧾' },
     { path: '/collections', label: 'Cuentas Cobro', icon: '📝' },
     { path: '/quotes', label: 'Presupuestos', icon: '📄' },
@@ -74,8 +75,8 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 p-4 md:p-10 lg:p-14">
-        <div className="max-w-6xl mx-auto pb-32 md:pb-10">
+      <main className="flex-1 p-4 md:p-10 lg:p-14 overflow-hidden">
+        <div className="max-w-7xl mx-auto pb-32 md:pb-10">
           {children}
         </div>
       </main>

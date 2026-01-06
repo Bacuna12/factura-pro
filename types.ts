@@ -49,7 +49,7 @@ export interface LineItem {
   description: string;
   quantity: number;
   unitPrice: number;
-  image?: string; // Imagen persistida del producto
+  image?: string;
 }
 
 export interface Payment {
@@ -82,7 +82,8 @@ export interface Document {
   withholdingRate?: number;
   logo?: string;
   payments?: Payment[];
-  paymentMethod?: string; // Nuevo campo
+  paymentMethod?: string;
+  isPOS?: boolean; // Nuevo: Para identificar facturas de Punto de Venta
 }
 
 export interface AppSettings {
