@@ -23,7 +23,7 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   const categories = useMemo(() => {
-    const cats = new Set(products.map(p => p.category || 'Sin Categoría'));
+    const cats = new Set(products.map(p => p.category || 'General'));
     return ['Todas', ...Array.from(cats)];
   }, [products]);
 
@@ -33,7 +33,7 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
       const matchesSearch = p.description.toLowerCase().includes(lowerSearch) || 
                            (p.sku || '').toLowerCase().includes(lowerSearch) ||
                            (p.barcode || '').toLowerCase().includes(lowerSearch);
-      const matchesCategory = activeCategory === 'Todas' || (p.category || 'Sin Categoría') === activeCategory;
+      const matchesCategory = activeCategory === 'Todas' || (p.category || 'General') === activeCategory;
       return matchesSearch && matchesCategory;
     });
   }, [products, searchTerm, activeCategory]);
@@ -115,7 +115,7 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-10">
+    <div className="space-y-6 animate-fadeIn pb-24 md:pb-10">
       {isScannerOpen && <BarcodeScanner onScan={handleScanResult} onClose={() => setIsScannerOpen(false)} />}
       
       <ConfirmModal 
@@ -129,21 +129,21 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
         onCancel={() => setProductToDelete(null)}
       />
 
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-3xl font-black text-gray-900 tracking-tight">Catálogo e Inventario</h2>
-          <p className="text-gray-500 font-medium">Gestiona existencias, precios de compra/venta e imágenes</p>
+          <h2 className="text-3xl font-black text-gray-900 tracking-tight uppercase">Inventario</h2>
+          <p className="text-gray-500 font-medium">Gestión compacta de productos y existencias</p>
         </div>
         <button 
           onClick={openAddModal}
-          className="w-full md:w-auto px-6 py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center space-x-2"
+          className="w-full sm:w-auto px-6 py-4 bg-blue-600 text-white rounded-2xl font-black shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center space-x-2"
         >
           <span>+</span>
-          <span>Nuevo Producto</span>
+          <span className="text-xs uppercase tracking-widest">Añadir Producto</span>
         </button>
       </div>
 
-      <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4">
+      <div className="bg-white p-4 rounded-[32px] shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4">
         <div className="relative flex-1">
           <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
           <input 
@@ -161,7 +161,7 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
               onClick={() => setActiveCategory(cat)}
               className={`px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest whitespace-nowrap transition-all ${
                 activeCategory === cat 
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' 
+                ? 'bg-slate-900 text-white shadow-lg' 
                 : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
               }`}
             >
@@ -171,62 +171,73 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredProducts.map(product => {
-          const stock = product.stock || 0;
-          const stockColor = stock <= 0 ? 'bg-rose-100 text-rose-600' : stock < 5 ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600';
-          const margin = product.salePrice - product.purchasePrice;
-          const marginPercent = product.salePrice > 0 ? Math.round((margin / product.salePrice) * 100) : 0;
-          
-          return (
-            <div key={product.id} className="bg-white rounded-[32px] shadow-sm border border-gray-100 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-500/5 transition-all group overflow-hidden">
-              <div className="relative h-48 bg-slate-100 overflow-hidden">
-                {product.image ? (
-                  <img src={product.image} alt={product.description} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-5xl opacity-20">📦</div>
-                )}
-                <div className="absolute top-4 left-4 right-4 flex justify-between items-start">
-                  <div className="px-3 py-1 bg-white/90 backdrop-blur-sm text-blue-600 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">
-                    {product.category || 'General'}
-                  </div>
-                  <div className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm ${stockColor.replace('bg-', 'bg-white/90 ')}`}>
-                    Stock: {stock}
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 space-y-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{product.sku || 'S/R'}</p>
-                    <h3 className="font-black text-lg text-gray-900 line-clamp-2 leading-tight h-10">{product.description}</h3>
-                  </div>
-                  <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => openEditModal(product)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl">✏️</button>
-                    <button onClick={() => setProductToDelete(product.id)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl">🗑️</button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 py-4 border-t border-gray-50">
-                  <div>
-                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Costo Compra</p>
-                    <p className="text-sm font-bold text-gray-500">{formatCurrency(product.purchasePrice)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Precio Venta</p>
-                    <p className="text-xl font-black text-blue-600">{formatCurrency(product.salePrice)}</p>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                  <span className="text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">Margen: {marginPercent}%</span>
-                  {product.barcode && <span className="text-slate-300">🏷️ {product.barcode}</span>}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      {/* Vista de Lista / Tabla Compacta */}
+      <div className="bg-white rounded-[32px] shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-gray-50 text-[10px] font-black text-gray-400 uppercase tracking-widest border-b">
+              <tr>
+                <th className="px-6 py-4 w-16">Item</th>
+                <th className="px-6 py-4">Descripción / SKU</th>
+                <th className="px-6 py-4 hidden md:table-cell">Categoría</th>
+                <th className="px-6 py-4">Precio Venta</th>
+                <th className="px-6 py-4 text-center">Stock</th>
+                <th className="px-6 py-4 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {filteredProducts.map(product => {
+                const stock = product.stock || 0;
+                const stockColor = stock <= 0 ? 'text-rose-600 bg-rose-50' : stock < 10 ? 'text-amber-600 bg-amber-50' : 'text-emerald-600 bg-emerald-50';
+                
+                return (
+                  <tr key={product.id} className="hover:bg-gray-50/50 transition-colors group">
+                    <td className="px-6 py-4">
+                      <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 overflow-hidden flex items-center justify-center flex-shrink-0">
+                        {product.image ? (
+                          <img src={product.image} className="w-full h-full object-cover" alt="" />
+                        ) : (
+                          <span className="text-xl opacity-20">📦</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="font-bold text-gray-900 text-sm line-clamp-1">{product.description}</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{product.sku || 'SIN SKU'}</p>
+                    </td>
+                    <td className="px-6 py-4 hidden md:table-cell">
+                      <span className="px-2 py-1 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase">
+                        {product.category || 'General'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 font-black text-blue-600 text-sm">
+                      {formatCurrency(product.salePrice)}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`px-3 py-1 rounded-full text-[10px] font-black ${stockColor}`}>
+                        {stock} uds.
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end space-x-1">
+                        <button onClick={() => openEditModal(product)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all">✏️</button>
+                        <button onClick={() => setProductToDelete(product.id)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-xl transition-all">🗑️</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {filteredProducts.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-20 text-center">
+                    <div className="text-5xl mb-4 opacity-10">📦</div>
+                    <p className="text-gray-400 font-bold">No hay productos que coincidan</p>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {isModalOpen && editingProduct && (
@@ -263,7 +274,7 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
                     <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
                     {!editingProduct.image && (
                       <button 
-                        type="button"
+                        type="button" 
                         onClick={() => fileInputRef.current?.click()}
                         className="absolute inset-0 w-full h-full cursor-pointer"
                       />
@@ -311,7 +322,7 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Código de Barras</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Código de Barras / SKU</label>
                     <div className="flex gap-2">
                       <input type="text" value={editingProduct.barcode || ''} onChange={e => setEditingProduct({...editingProduct, barcode: e.target.value})} className="flex-1 p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold" />
                       <button type="button" onClick={() => setIsScannerOpen(true)} className="w-14 bg-slate-100 rounded-2xl flex items-center justify-center text-xl hover:bg-slate-200">📷</button>
@@ -321,7 +332,7 @@ const ProductManager: React.FC<ProductManagerProps> = ({ products, onUpdateProdu
               </div>
 
               <button type="submit" className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl shadow-xl hover:bg-blue-700 transition-all active:scale-[0.98] uppercase tracking-widest text-xs">
-                Guardar Cambios en Catálogo
+                Guardar Producto
               </button>
             </form>
           </div>
