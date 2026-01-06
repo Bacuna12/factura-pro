@@ -57,7 +57,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     id: '', name: '', email: '', taxId: '', address: '', city: '', municipality: '', zipCode: ''
   });
   const [quickProduct, setQuickProduct] = useState<Product>({
-    id: '', description: '', unitPrice: 0, category: 'General', sku: '', barcode: '', stock: 0
+    id: '', description: '', purchasePrice: 0, salePrice: 0, category: 'General', sku: '', barcode: '', stock: 0
   });
 
   const [isProductSelectorOpen, setIsProductSelectorOpen] = useState(false);
@@ -103,7 +103,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
             p.description.toLowerCase() === lowerValue || 
             (p.barcode && p.barcode.toLowerCase() === lowerValue)
           );
-          if (matchedProduct) updatedItem.unitPrice = matchedProduct.unitPrice;
+          if (matchedProduct) updatedItem.unitPrice = matchedProduct.salePrice;
         }
         return updatedItem;
       }
@@ -117,7 +117,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
       const matched = products.find(p => p.barcode === code);
       if (matched) {
         updateItem(activeScannerItemId, 'description', matched.description);
-        updateItem(activeScannerItemId, 'unitPrice', matched.unitPrice);
+        updateItem(activeScannerItemId, 'unitPrice', matched.salePrice);
       } else {
         updateItem(activeScannerItemId, 'description', code);
       }
@@ -151,7 +151,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     if (activeItemSelectorId) {
       const newItems = doc.items.map(item => {
         if (item.id === activeItemSelectorId) {
-          return { ...item, description: newProduct.description, unitPrice: newProduct.unitPrice };
+          return { ...item, description: newProduct.description, unitPrice: newProduct.salePrice };
         }
         return item;
       });
@@ -159,14 +159,14 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     }
     setIsQuickProductOpen(false);
     setIsProductSelectorOpen(false);
-    setQuickProduct({ id: '', description: '', unitPrice: 0, category: 'General', sku: '', barcode: '', stock: 0 });
+    setQuickProduct({ id: '', description: '', purchasePrice: 0, salePrice: 0, category: 'General', sku: '', barcode: '', stock: 0 });
   };
 
   const handleSelectProductFromCatalog = (product: Product) => {
     if (!activeItemSelectorId) return;
     const newItems = doc.items.map(item => {
       if (item.id === activeItemSelectorId) {
-        return { ...item, description: product.description, unitPrice: product.unitPrice };
+        return { ...item, description: product.description, unitPrice: product.salePrice };
       }
       return item;
     });
@@ -366,6 +366,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
         </div>
       </form>
 
+      {/* MODALS */}
       {isProductSelectorOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[150] flex items-center justify-center p-4">
           <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden animate-slideUp">
@@ -406,16 +407,23 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                       isCollection ? 'hover:bg-violet-50' : 'hover:bg-indigo-50'
                     }`}
                   >
-                    <div>
-                      <span className={`font-bold block transition-colors ${isCollection ? 'group-hover:text-violet-700' : 'group-hover:text-indigo-700'}`}>{p.description}</span>
-                      <div className="flex gap-2 items-center">
-                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${stock <= 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                          STOCK: {stock}
-                        </span>
-                        {p.barcode && <span className="text-[9px] text-slate-400 font-bold tracking-tight">🏷️ {p.barcode}</span>}
+                    <div className="flex items-center gap-3">
+                      {p.image ? (
+                        <img src={p.image} className="w-10 h-10 rounded-lg object-cover" alt="" />
+                      ) : (
+                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xl">📦</div>
+                      )}
+                      <div>
+                        <span className={`font-bold block transition-colors ${isCollection ? 'group-hover:text-violet-700' : 'group-hover:text-indigo-700'}`}>{p.description}</span>
+                        <div className="flex gap-2 items-center">
+                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${stock <= 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                            STOCK: {stock}
+                          </span>
+                          {p.barcode && <span className="text-[9px] text-slate-400 font-bold tracking-tight">🏷️ {p.barcode}</span>}
+                        </div>
                       </div>
                     </div>
-                    <span className={`font-black ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>{formatCurrency(p.unitPrice)}</span>
+                    <span className={`font-black ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>{formatCurrency(p.salePrice)}</span>
                   </button>
                 );
               })}
@@ -473,8 +481,8 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                   <input type="number" required value={quickProduct.stock || 0} onChange={e => setQuickProduct({...quickProduct, stock: parseInt(e.target.value)})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black uppercase text-gray-400">Precio Unitario</label>
-                  <input type="number" required value={quickProduct.unitPrice} onChange={e => setQuickProduct({...quickProduct, unitPrice: parseFloat(e.target.value)})} className={`w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-black text-xl ${isCollection ? 'text-violet-600' : 'text-indigo-600'}`} />
+                  <label className="text-[10px] font-black uppercase text-gray-400">Precio Venta</label>
+                  <input type="number" required value={quickProduct.salePrice} onChange={e => setQuickProduct({...quickProduct, salePrice: parseFloat(e.target.value)})} className={`w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-black text-xl ${isCollection ? 'text-violet-600' : 'text-indigo-600'}`} />
                 </div>
               </div>
               <div>

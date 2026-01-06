@@ -35,11 +35,13 @@ export interface Client {
 export interface Product {
   id: string;
   description: string;
-  unitPrice: number;
+  purchasePrice: number; // Precio de compra
+  salePrice: number;     // Precio de venta
   category?: string;
   sku?: string;
   barcode?: string;
-  stock?: number; // Gestión de existencias
+  stock?: number;
+  image?: string;        // URL o Base64 de la imagen
 }
 
 export interface LineItem {
