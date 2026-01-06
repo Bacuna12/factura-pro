@@ -28,7 +28,6 @@ interface DocumentEditorProps {
 }
 
 const DocumentEditor: React.FC<DocumentEditorProps> = ({ 
-  // Added missing onDelete to destructuring to fix line 235 and 236 errors.
   type, clients, products, onSave, onUpdateClients, onUpdateProducts, settings, initialData, onDelete
 }) => {
   const navigate = useNavigate();
@@ -233,7 +232,6 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   };
 
   const handleDelete = () => {
-    // Fixed reference to onDelete here.
     if (initialData && onDelete) {
         onDelete(initialData.id);
         navigate(-1);
@@ -449,7 +447,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
         </div>
       </form>
 
-      {/* MODALES (SE MANTIENEN IGUAL) */}
+      {/* MODALES */}
       {isProductSelectorOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[150] flex items-center justify-center p-4">
           <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden animate-slideUp">
