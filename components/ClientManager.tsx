@@ -23,6 +23,7 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onUpdateClients 
       id: Math.random().toString(36).substr(2, 9),
       name: '',
       email: '',
+      phone: '',
       taxId: '',
       address: '',
       city: '',
@@ -106,9 +107,10 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onUpdateClients 
             </div>
             
             <h3 className="font-black text-xl text-gray-900 truncate mb-1">{client.name}</h3>
-            <p className="text-xs font-bold text-blue-600 truncate mb-4">{client.email}</p>
+            <p className="text-xs font-bold text-blue-600 truncate mb-1">{client.email}</p>
+            <p className="text-[10px] font-black text-emerald-600 tracking-widest">{client.phone || 'S/N Teléfono'}</p>
             
-            <div className="space-y-3 pt-4 border-t border-gray-50">
+            <div className="space-y-3 pt-4 border-t border-gray-50 mt-4">
               <div className="flex items-center text-[10px] font-black uppercase tracking-widest text-gray-400">
                 <span className="w-20">NIT/ID:</span>
                 <span className="text-gray-900">{client.taxId}</span>
@@ -168,6 +170,16 @@ const ClientManager: React.FC<ClientManagerProps> = ({ clients, onUpdateClients 
                       onChange={e => setEditingClient({...editingClient, email: e.target.value})}
                       className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold"
                       placeholder="email@cliente.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-black text-gray-500 uppercase mb-2">Teléfono / WhatsApp</label>
+                    <input 
+                      type="tel" required
+                      value={editingClient.phone}
+                      onChange={e => setEditingClient({...editingClient, phone: e.target.value})}
+                      className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold"
+                      placeholder="Ej. +573001234567"
                     />
                   </div>
                   <div>

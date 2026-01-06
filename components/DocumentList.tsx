@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Document, DocumentType, DocumentStatus, Client, AppSettings, Product, Payment } from '../types';
-import { exportToPDF } from '../services/pdfService';
+import { exportToPDF, shareViaWhatsApp } from '../services/pdfService';
 import ConfirmModal from './ConfirmModal';
 
 interface DocumentListProps {
@@ -33,6 +33,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
   const [activeDocForPayment, setActiveDocForPayment] = useState<Document | null>(null);
   const [paymentAmountStr, setPaymentAmountStr] = useState<string>('0');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
+
+  // Estados para Modal de WhatsApp
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [activeDocForWhatsApp, setActiveDocForWhatsApp] = useState<Document | null>(null);
+  const [whatsappPhone, setWhatsappPhone] = useState('');
 
   const isCollection = type === DocumentType.ACCOUNT_COLLECTION;
 
@@ -77,17 +82,32 @@ const DocumentList: React.FC<DocumentListProps> = ({
     exportToPDF(doc, client, settings);
   };
 
+  const handleOpenWhatsAppModal = (doc: Document) => {
+    const client = getClient(doc.clientId);
+    setActiveDocForWhatsApp(doc);
+    setWhatsappPhone(client?.phone || '');
+    setIsWhatsAppModalOpen(true);
+  };
+
+  const handleConfirmWhatsApp = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (activeDocForWhatsApp) {
+      const client = getClient(activeDocForWhatsApp.clientId);
+      shareViaWhatsApp(activeDocForWhatsApp, client, settings, whatsappPhone);
+      setIsWhatsAppModalOpen(false);
+      setActiveDocForWhatsApp(null);
+    }
+  };
+
   const handleOpenPayment = (doc: Document) => {
     const total = calculateTotal(doc);
     const paid = calculatePaid(doc);
     const remaining = Math.max(0, total - paid);
     
-    // Seteo explícito de estados
     setActiveDocForPayment(doc);
     setPaymentAmountStr(remaining.toFixed(0));
     setPaymentMethod(doc.paymentMethod || 'Efectivo');
     
-    // Pequeño timeout para asegurar que el thread principal procese el clic antes de abrir el modal fixed
     setTimeout(() => {
       setIsPaymentModalOpen(true);
     }, 50);
@@ -114,7 +134,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const docTotal = calculateTotal(activeDocForPayment);
 
     let newStatus = activeDocForPayment.status;
-    // Margen de 1 unidad para redondevos
     if (totalPaid >= docTotal - 1) { 
       newStatus = DocumentStatus.PAID;
     } else if (totalPaid > 0) {
@@ -226,12 +245,15 @@ const DocumentList: React.FC<DocumentListProps> = ({
                     <button 
                       type="button"
                       onClick={() => handleOpenPayment(doc)} 
-                      className="w-20 h-16 flex flex-col items-center justify-center bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-100 active:bg-emerald-700 active:scale-90 transition-all z-[30] relative"
+                      className="w-16 h-16 flex flex-col items-center justify-center bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-100 active:bg-emerald-700 active:scale-90 transition-all z-[30] relative"
                     >
                       <span className="text-xl">💸</span>
                       <span className="text-[8px] font-black uppercase mt-0.5">Cobrar</span>
                     </button>
                   )}
+                  <button onClick={() => handleOpenWhatsAppModal(doc)} className="w-12 h-16 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-2xl active:bg-emerald-100">
+                    <span className="text-xl">💬</span>
+                  </button>
                   <button onClick={() => handleExportPDF(doc)} className="w-12 h-16 flex items-center justify-center bg-slate-100 text-slate-600 rounded-2xl active:bg-slate-200">📥</button>
                 </div>
               </div>
@@ -282,8 +304,9 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end space-x-2">
                       {!isPaid && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
-                        <button onClick={() => handleOpenPayment(doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl">💸</button>
+                        <button onClick={() => handleOpenPayment(doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl" title="Registrar Cobro">💸</button>
                       )}
+                      <button onClick={() => handleOpenWhatsAppModal(doc)} className="p-2.5 text-emerald-500 hover:bg-emerald-50 rounded-xl" title="Enviar WhatsApp">💬</button>
                       <button onClick={() => handleExportPDF(doc)} className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl">📥</button>
                       <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl">✏️</button>
                       <button onClick={() => onDelete(doc.id)} className="p-2.5 text-rose-600 hover:bg-rose-50 rounded-xl">🗑️</button>
@@ -296,11 +319,57 @@ const DocumentList: React.FC<DocumentListProps> = ({
         </div>
       </div>
 
-      {/* MODAL DE PAGO (NIVEL PORTAL) */}
+      {/* MODAL DE WHATSAPP (Asegurar que el número sea correcto) */}
+      {isWhatsAppModalOpen && activeDocForWhatsApp && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-xl flex items-center justify-center p-4 z-[2147483647]"
+          onClick={() => setIsWhatsAppModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl animate-slideUp"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bg-emerald-600 p-8 text-white text-center">
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <span className="text-3xl">💬</span>
+              </div>
+              <h3 className="text-xl font-black">Enviar por WhatsApp</h3>
+              <p className="text-emerald-100 text-[10px] font-black uppercase mt-1">Confirmar número de destino</p>
+            </div>
+            
+            <form onSubmit={handleConfirmWhatsApp} className="p-8 space-y-6">
+              <div className="space-y-2">
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest px-2">Número de Teléfono</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600 font-black">+</span>
+                  <input 
+                    type="tel"
+                    autoFocus
+                    required
+                    value={whatsappPhone} 
+                    onChange={e => setWhatsappPhone(e.target.value)}
+                    className="w-full p-4 pl-8 bg-gray-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl font-black text-lg text-emerald-900 outline-none transition-all"
+                    placeholder="573001234567"
+                  />
+                </div>
+                <p className="text-[8px] text-gray-400 px-2 font-bold uppercase italic">* Incluye código de país sin el signo + (Ej: 57 para Colombia)</p>
+              </div>
+
+              <div className="flex flex-col gap-3 pt-2">
+                <button type="submit" className="w-full py-5 bg-emerald-600 text-white rounded-3xl font-black shadow-xl shadow-emerald-200 active:scale-95 transition-all uppercase tracking-widest text-xs flex items-center justify-center gap-2">
+                  <span>🚀</span> ABRIR WHATSAPP
+                </button>
+                <button type="button" onClick={() => setIsWhatsAppModalOpen(false)} className="w-full py-2 font-bold text-gray-400 active:text-gray-600 uppercase text-[10px] tracking-widest">Cancelar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE PAGO */}
       {isPaymentModalOpen && activeDocForPayment && (
         <div 
-          className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4" 
-          style={{ zIndex: 2147483647, position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
+          className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 z-[2147483647]" 
           onClick={() => setIsPaymentModalOpen(false)}
         >
           <div 

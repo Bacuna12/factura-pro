@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { AppSettings, BackupData } from '../types';
+import { AppSettings, BackupData, PdfTemplate } from '../types';
 import { database } from '../services/databaseService';
 
 interface SettingsProps {
@@ -17,7 +17,10 @@ interface SettingsProps {
 }
 
 const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImportData, allData }) => {
-  const [formData, setFormData] = useState<AppSettings>(settings);
+  const [formData, setFormData] = useState<AppSettings>({
+    ...settings,
+    pdfTemplate: settings.pdfTemplate || PdfTemplate.PROFESSIONAL
+  });
   const [dbStats, setDbStats] = useState(database.getStats());
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
@@ -31,8 +34,13 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
     { code: 'USD', label: 'Dólar Estadounidense ($)' },
     { code: 'EUR', label: 'Euro (€)' },
     { code: 'MXN', label: 'Peso Mexicano ($)' },
-    { code: 'CLP', label: 'Peso Chileno ($)' },
-    { code: 'ARS', label: 'Peso Argentino ($)' },
+  ];
+
+  const templates = [
+    { id: PdfTemplate.PROFESSIONAL, name: 'Profesional', desc: 'Sólido y corporativo', icon: '🏛️' },
+    { id: PdfTemplate.MINIMALIST, name: 'Minimalista', desc: 'Limpio y moderno', icon: '🍃' },
+    { id: PdfTemplate.MODERN_DARK, name: 'Premium Dark', desc: 'Elegante y lujoso', icon: '💎' },
+    { id: PdfTemplate.COMPACT_TICKET, name: 'Ticket POS', desc: 'Compacto para recibos', icon: '🎫' },
   ];
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,219 +59,122 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const handleExport = () => {
-    const backup = database.getAllData();
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backup));
-    const downloadAnchorNode = document.createElement('a');
-    downloadAnchorNode.setAttribute("href", dataStr);
-    downloadAnchorNode.setAttribute("download", `facturapro_database_${new Date().toISOString().split('T')[0]}.json`);
-    document.body.appendChild(downloadAnchorNode);
-    downloadAnchorNode.click();
-    downloadAnchorNode.remove();
-  };
-
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const json = JSON.parse(event.target?.result as string);
-          if (confirm('¿Estás seguro? Se sobrescribirá TODA la base de datos actual con este respaldo.')) {
-            onImportData(json as BackupData);
-          }
-        } catch (err) {
-          alert('Error: El archivo no es un respaldo válido de FacturaPro.');
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateSettings(formData);
-    alert('Ajustes corporativos guardados');
+    alert('Configuración actualizada correctamente');
   };
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-24">
-      <header>
-        <h2 className="text-3xl font-black text-gray-900 tracking-tight">Ajustes</h2>
-        <p className="text-gray-500 font-medium">Consola de administración y configuración global</p>
+    <div className="space-y-8 animate-fadeIn pb-24 max-w-5xl mx-auto">
+      <header className="flex justify-between items-end">
+        <div>
+          <h2 className="text-4xl font-black text-slate-900 tracking-tight">AJUSTES</h2>
+          <p className="text-slate-500 font-medium">Configuración de marca y sistema</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Base de Datos</p>
+          <p className="text-sm font-black text-slate-900">{dbStats.totalRecords} Registros</p>
+        </div>
       </header>
 
-      {/* Monitor de Base de Datos */}
-      <div className="bg-slate-900 rounded-[32px] p-8 text-white shadow-xl shadow-slate-200">
-        <div className="flex justify-between items-start mb-8">
-          <div>
-            <h3 className="text-xl font-black mb-1">Estado de la Base de Datos</h3>
-            <p className="text-slate-400 text-sm">Registros almacenados localmente</p>
+      <form onSubmit={handleSubmit} className="space-y-8">
+        {/* PERFIL CORPORATIVO */}
+        <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 p-8 md:p-10 space-y-10">
+          <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
+            <span className="text-3xl">🏢</span>
+            <h3 className="text-2xl font-black text-slate-800 tracking-tighter">Perfil de Empresa</h3>
           </div>
-          <div className="px-4 py-1.5 bg-blue-500/20 text-blue-400 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-500/30">
-            Engine v2.5 Online
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <DbStatItem label="Facturas" value={dbStats.facturas} icon="🧾" />
-          <DbStatItem label="Presup." value={dbStats.presupuestos} icon="📄" />
-          <DbStatItem label="Clientes" value={dbStats.clientes} icon="👥" />
-          <DbStatItem label="Productos" value={dbStats.productos} icon="📦" />
-          <DbStatItem label="Gastos" value={dbStats.gastos} icon="💸" />
-        </div>
 
-        <div className="mt-8 pt-6 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-            Total de registros: <span className="text-white">{dbStats.totalRecords}</span>
-          </p>
-          <button 
-            onClick={database.clearDatabase}
-            className="text-[10px] font-black text-rose-400 hover:text-rose-300 uppercase tracking-widest bg-rose-500/10 px-4 py-2 rounded-xl border border-rose-500/20 transition-all"
-          >
-            🔥 Borrar Toda la Base de Datos
-          </button>
-        </div>
-      </div>
-
-      <form onSubmit={handleSubmit} className="bg-white rounded-[32px] shadow-sm border border-gray-100 overflow-hidden">
-        <div className="p-8 border-b border-gray-50">
-          <h3 className="text-xl font-black text-gray-800 mb-6">Perfil Corporativo</h3>
-          
-          <div className="mb-8 flex flex-col sm:flex-row items-center gap-6 p-6 bg-slate-50 rounded-[24px] border border-slate-100">
-            <div className="relative group">
-              <div className={`w-32 h-32 border-2 border-dashed rounded-3xl flex items-center justify-center overflow-hidden bg-white transition-colors ${formData.logo ? 'border-transparent' : 'border-slate-200 group-hover:border-blue-400'}`}>
-                {formData.logo ? (
-                  <img src={formData.logo} alt="Logo preview" className="w-full h-full object-contain p-2" />
-                ) : (
-                  <div className="text-center p-2">
-                    <span className="text-3xl mb-1 block">🖼️</span>
-                    <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Logo</span>
+          <div className="flex flex-col md:flex-row gap-10 items-start">
+            <div className="w-full md:w-48 space-y-4">
+               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Logo de Marca</p>
+               <div className="relative aspect-square w-full bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group">
+                  {formData.logo ? (
+                    <img src={formData.logo} className="w-full h-full object-contain p-4" alt="Logo" />
+                  ) : (
+                    <span className="text-4xl opacity-20">🖼️</span>
+                  )}
+                  <input type="file" ref={fileInputRef} onChange={handleLogoUpload} className="hidden" accept="image/*" />
+                  <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 bg-white rounded-full text-slate-900 shadow-xl">✏️</button>
+                    {formData.logo && <button type="button" onClick={removeLogo} className="p-2 bg-rose-500 rounded-full text-white shadow-xl">✕</button>}
                   </div>
-                )}
+               </div>
+            </div>
+
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Nombre Comercial</label>
+                <input required type="text" value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
               </div>
-              {formData.logo && (
-                <button 
-                  type="button"
-                  onClick={removeLogo}
-                  className="absolute -top-2 -right-2 bg-rose-500 text-white w-8 h-8 rounded-full shadow-lg hover:bg-rose-600 transition-colors flex items-center justify-center font-bold"
-                >
-                  ✕
-                </button>
-              )}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">NIT / Identificación</label>
+                <input required type="text" value={formData.companyId} onChange={e => setFormData({...formData, companyId: e.target.value})} className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Impuesto por Defecto (%)</label>
+                <input required type="number" value={formData.defaultTaxRate} onChange={e => setFormData({...formData, defaultTaxRate: parseFloat(e.target.value)})} className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Dirección Principal</label>
+                <input required type="text" value={formData.companyAddress} onChange={e => setFormData({...formData, companyAddress: e.target.value})} className="w-full p-4 bg-slate-50 border-none rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+              </div>
             </div>
-            <div className="flex-1 text-center sm:text-left">
-              <h4 className="text-lg font-black text-slate-800 mb-1">Logotipo de Marca</h4>
-              <p className="text-sm text-slate-500 mb-4">Aparecerá en el encabezado de todos tus documentos.</p>
-              <input type="file" ref={fileInputRef} onChange={handleLogoUpload} accept="image/*" className="hidden" />
-              <button 
-                type="button" 
-                onClick={() => fileInputRef.current?.click()}
-                className="px-6 py-2.5 bg-blue-600 text-white hover:bg-blue-700 rounded-xl font-bold text-xs transition-all shadow-md"
+          </div>
+        </div>
+
+        {/* PLANTILLAS PDF */}
+        <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 p-8 md:p-10 space-y-6">
+          <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
+            <span className="text-3xl">📄</span>
+            <h3 className="text-2xl font-black text-slate-800 tracking-tighter">Estilo de Documentos</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {templates.map(tmp => (
+              <button
+                key={tmp.id}
+                type="button"
+                onClick={() => setFormData({...formData, pdfTemplate: tmp.id})}
+                className={`p-6 rounded-[32px] border-2 text-left transition-all relative overflow-hidden group active:scale-95 ${
+                  formData.pdfTemplate === tmp.id 
+                  ? 'border-blue-600 bg-blue-50' 
+                  : 'border-slate-50 bg-slate-50/50 hover:bg-slate-100 hover:border-slate-200'
+                }`}
               >
-                {formData.logo ? 'Cambiar Imagen' : 'Subir Logotipo'}
+                <div className="text-3xl mb-4">{tmp.icon}</div>
+                <h4 className={`font-black text-sm mb-1 ${formData.pdfTemplate === tmp.id ? 'text-blue-900' : 'text-slate-800'}`}>{tmp.name}</h4>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{tmp.desc}</p>
+                {formData.pdfTemplate === tmp.id && (
+                  <div className="absolute top-4 right-4 text-blue-600 text-xl font-black">✓</div>
+                )}
               </button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Nombre Legal</label>
-              <input 
-                type="text"
-                value={formData.companyName}
-                onChange={e => setFormData({...formData, companyName: e.target.value})}
-                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">NIT / RUT</label>
-              <input 
-                type="text"
-                value={formData.companyId}
-                onChange={e => setFormData({...formData, companyId: e.target.value})}
-                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold"
-              />
-            </div>
-            <div className="md:col-span-2 space-y-2">
-              <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Dirección Comercial</label>
-              <input 
-                type="text"
-                value={formData.companyAddress}
-                onChange={e => setFormData({...formData, companyAddress: e.target.value})}
-                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold"
-              />
-            </div>
+            ))}
           </div>
         </div>
 
-        <div className="p-8 bg-slate-50/50 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">Moneda Principal</label>
-            <select 
-              value={formData.currency}
-              onChange={e => setFormData({...formData, currency: e.target.value})}
-              className="w-full p-4 bg-white border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold"
-            >
-              {currencies.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest">IVA General (%)</label>
-            <input 
-              type="number"
-              value={formData.defaultTaxRate}
-              onChange={e => setFormData({...formData, defaultTaxRate: parseFloat(e.target.value)})}
-              className="w-full p-4 bg-white border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold"
-            />
-          </div>
-        </div>
-
-        <div className="p-8 bg-white border-t border-gray-100 flex justify-end">
-          <button type="submit" className="w-full sm:w-auto px-10 py-4 bg-blue-600 text-white font-black rounded-2xl shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all">
-            Guardar Configuración
+        <div className="flex flex-col md:flex-row gap-4 items-center">
+          <button type="submit" className="flex-1 py-6 bg-slate-900 text-white rounded-[32px] font-black shadow-xl shadow-slate-200 active:scale-[0.98] transition-all uppercase tracking-widest text-sm">
+            Guardar Todo los Ajustes
           </button>
+          
+          <div className="flex gap-2">
+            <button type="button" onClick={() => database.clearDatabase()} className="p-6 bg-rose-50 text-rose-600 rounded-[32px] font-black border border-rose-100 hover:bg-rose-100 transition-colors" title="Limpiar Base de Datos">🗑️</button>
+            <button type="button" onClick={() => importInputRef.current?.click()} className="p-6 bg-blue-50 text-blue-600 rounded-[32px] font-black border border-blue-100 hover:bg-blue-100 transition-colors" title="Importar Backup">📥</button>
+            <input type="file" ref={importInputRef} onChange={e => {
+               const file = e.target.files?.[0];
+               if (file) {
+                 const reader = new FileReader();
+                 reader.onload = (ev) => onImportData(JSON.parse(ev.target?.result as string));
+                 reader.readAsText(file);
+               }
+            }} className="hidden" accept=".json" />
+          </div>
         </div>
       </form>
-
-      {/* Backup Section */}
-      <div className="bg-white rounded-[32px] p-8 shadow-sm border border-gray-100">
-        <div className="flex items-center space-x-3 mb-6">
-          <span className="text-2xl">💾</span>
-          <h3 className="text-xl font-black text-gray-800">Copia de Seguridad Externo</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <button 
-            onClick={handleExport}
-            className="p-6 bg-blue-50 rounded-[24px] border border-blue-100 text-left hover:bg-blue-100 transition-all group"
-          >
-            <span className="text-2xl mb-2 block">📥</span>
-            <h4 className="font-bold text-blue-900 mb-1">Exportar JSON</h4>
-            <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Descargar base de datos completa</p>
-          </button>
-          <button 
-            onClick={() => importInputRef.current?.click()}
-            className="p-6 bg-slate-50 rounded-[24px] border border-slate-200 text-left hover:bg-slate-100 transition-all group"
-          >
-            <span className="text-2xl mb-2 block">📤</span>
-            <h4 className="font-bold text-slate-900 mb-1">Importar JSON</h4>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Restaurar desde un archivo</p>
-            <input type="file" ref={importInputRef} onChange={handleImport} accept=".json" className="hidden" />
-          </button>
-        </div>
-      </div>
     </div>
   );
 };
-
-const DbStatItem: React.FC<{ label: string; value: number; icon: string }> = ({ label, value, icon }) => (
-  <div className="bg-white/5 p-4 rounded-2xl border border-white/5 flex items-center space-x-3">
-    <span className="text-xl">{icon}</span>
-    <div>
-      <p className="text-[9px] text-slate-500 font-black uppercase tracking-tighter leading-none mb-1">{label}</p>
-      <p className="text-lg font-black leading-none">{value}</p>
-    </div>
-  </div>
-);
 
 export default Settings;

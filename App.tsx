@@ -24,6 +24,7 @@ const INITIAL_CLIENTS: Client[] = [
     id: '1', 
     name: 'Consumidor Final', 
     email: 'cliente@final.com', 
+    phone: '0000000000',
     taxId: '222222222222', 
     address: 'Caja Principal',
     city: 'Ventas Directas',
@@ -126,7 +127,7 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<Dashboard documents={documents} expenses={expenses} clientsCount={clients.length} settings={settings} onDeleteDoc={handleDeleteDocument} onUpdateDoc={handleSaveDocument} clients={clients} />} />
           
-          <Route path="/pos" element={<POS products={products} clients={clients} settings={settings} onSaveDocument={handleSaveDocument} />} />
+          <Route path="/pos" element={<POS products={products} clients={clients} settings={settings} onSaveDocument={handleSaveDocument} onUpdateClients={handleUpdateClients} />} />
 
           <Route path="/invoices" element={<DocumentList type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
           <Route path="/invoices/new" element={<DocumentEditor key="new-invoice" type={DocumentType.INVOICE} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />

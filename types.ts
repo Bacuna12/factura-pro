@@ -14,6 +14,13 @@ export enum DocumentStatus {
   REJECTED = 'Rechazado'
 }
 
+export enum PdfTemplate {
+  PROFESSIONAL = 'PROFESSIONAL',
+  MINIMALIST = 'MINIMALIST',
+  MODERN_DARK = 'MODERN_DARK',
+  COMPACT_TICKET = 'COMPACT_TICKET'
+}
+
 export interface User {
   id: string;
   username: string;
@@ -25,6 +32,7 @@ export interface Client {
   id: string;
   name: string;
   email: string;
+  phone: string;
   taxId: string;
   address: string;
   city: string;
@@ -83,7 +91,7 @@ export interface Document {
   logo?: string;
   payments?: Payment[];
   paymentMethod?: string;
-  isPOS?: boolean; // Nuevo: Para identificar facturas de Punto de Venta
+  isPOS?: boolean;
 }
 
 export interface AppSettings {
@@ -93,6 +101,7 @@ export interface AppSettings {
   companyAddress: string;
   defaultTaxRate: number;
   logo?: string;
+  pdfTemplate?: PdfTemplate;
 }
 
 export interface BackupData {
