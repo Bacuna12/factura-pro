@@ -11,7 +11,9 @@ import {
   Product
 } from '../types';
 import { suggestInvoiceNotes } from '../services/geminiService';
+import { exportToPDF } from '../services/pdfService';
 import BarcodeScanner from './BarcodeScanner';
+import ConfirmModal from './ConfirmModal';
 
 interface DocumentEditorProps {
   type: DocumentType;
@@ -22,6 +24,7 @@ interface DocumentEditorProps {
   onUpdateProducts: (products: Product[]) => void;
   settings: AppSettings;
   initialData?: Document;
+  onDelete?: (id: string) => void;
 }
 
 const DocumentEditor: React.FC<DocumentEditorProps> = ({ 
@@ -30,6 +33,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   const navigate = useNavigate();
   const isCollection = type === DocumentType.ACCOUNT_COLLECTION;
   const [isSaving, setIsSaving] = useState(false);
+  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
   
   const [doc, setDoc] = useState<Document>(initialData || {
     id: Math.random().toString(36).substr(2, 9),
@@ -209,11 +213,17 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     }
     
     setIsSaving(true);
-    
-    // Llamamos al guardado
+
+    // AUTOMATIC PDF EXPORT ON SAVE
+    const client = clients.find(c => c.id === doc.clientId);
+    try {
+      exportToPDF(doc, client, settings);
+    } catch (pdfErr) {
+      console.error("Auto PDF error:", pdfErr);
+    }
+
     onSave(doc);
     
-    // Esperamos un breve momento para asegurar que el estado se procese y localStorage se escriba
     setTimeout(() => {
       if (type === DocumentType.INVOICE) navigate('/invoices');
       else if (type === DocumentType.ACCOUNT_COLLECTION) navigate('/collections');
@@ -221,10 +231,23 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     }, 300);
   };
 
+  const handleDelete = () => {
+    alert("Para eliminar esta factura, por favor utiliza el botón de papelera en el historial de facturas.");
+    navigate(-1);
+  };
+
   return (
     <>
       {isScannerOpen && <BarcodeScanner onScan={handleScanResult} onClose={() => setIsScannerOpen(false)} />}
       
+      <ConfirmModal 
+        isOpen={isConfirmDeleteOpen}
+        title="Eliminar Documento"
+        message="¿Estás seguro de que deseas borrar este registro definitivamente?"
+        onConfirm={handleDelete}
+        onCancel={() => setIsConfirmDeleteOpen(false)}
+      />
+
       <form onSubmit={handleSubmit} className="space-y-6 animate-fadeIn pb-10">
         <div className="flex justify-between items-center mb-6">
           <div>
@@ -385,19 +408,31 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                 </div>
               </div>
 
-              <button 
-                type="submit" 
-                disabled={isSaving}
-                className={`w-full mt-10 py-5 bg-white text-gray-900 rounded-[24px] font-black shadow-lg hover:bg-gray-50 transition-all active:scale-95 uppercase tracking-widest text-xs flex items-center justify-center ${isSaving ? 'opacity-70' : ''}`}
-              >
-                {isSaving ? 'Guardando...' : `Guardar ${type}`}
-              </button>
+              <div className="mt-10 space-y-3">
+                <button 
+                  type="submit" 
+                  disabled={isSaving}
+                  className={`w-full py-5 bg-white text-gray-900 rounded-[24px] font-black shadow-lg hover:bg-gray-50 transition-all active:scale-95 uppercase tracking-widest text-xs flex items-center justify-center ${isSaving ? 'opacity-70' : ''}`}
+                >
+                  {isSaving ? 'Guardando...' : `Guardar ${type}`}
+                </button>
+
+                {initialData && (
+                  <button 
+                    type="button" 
+                    onClick={() => setIsConfirmDeleteOpen(true)}
+                    className="w-full py-4 bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-[24px] font-black hover:bg-rose-500/40 transition-all uppercase tracking-widest text-[10px]"
+                  >
+                    Eliminar Documento
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
       </form>
 
-      {/* MODALES - Movidos fuera del form principal */}
+      {/* MODALES */}
       {isProductSelectorOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[150] flex items-center justify-center p-4">
           <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden animate-slideUp">

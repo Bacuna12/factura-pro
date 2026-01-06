@@ -90,7 +90,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
       <ConfirmModal 
         isOpen={!!docToDelete}
         title={`Eliminar ${type}`}
-        message="¿Estás seguro de que deseas eliminar este registro? Esta acción es irreversible."
+        message="¿Estás seguro de que deseas eliminar este registro? Los productos se devolverán automáticamente al stock del catálogo."
         onConfirm={() => {
           if (docToDelete) onDelete(docToDelete);
           setDocToDelete(null);
@@ -158,9 +158,9 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 <p className="text-xl font-black text-gray-900">{formatCurrency(calculateTotal(doc))}</p>
               </div>
               <div className="flex space-x-2">
-                <button onClick={() => handleExportPDF(doc)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">📥</button>
-                <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-3 bg-blue-50 text-blue-600 rounded-xl">✏️</button>
-                <button onClick={() => setDocToDelete(doc.id)} className="p-3 bg-rose-50 text-rose-600 rounded-xl">🗑️</button>
+                <button onClick={() => handleExportPDF(doc)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl" title="Descargar PDF">📥</button>
+                <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-3 bg-blue-50 text-blue-600 rounded-xl" title="Editar">✏️</button>
+                <button onClick={() => setDocToDelete(doc.id)} className="p-3 bg-rose-50 text-rose-600 rounded-xl" title="Eliminar Factura">🗑️</button>
               </div>
             </div>
           </div>
@@ -182,7 +182,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filteredDocs.map(doc => (
-                <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors">
+                <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors group">
                   <td className={`px-6 py-4 font-bold ${isCollection ? 'text-violet-700' : 'text-gray-900'}`}>#{doc.number}</td>
                   <td className="px-6 py-4">
                     <p className="text-gray-900 font-bold">{getClientName(doc.clientId)}</p>
@@ -195,10 +195,10 @@ const DocumentList: React.FC<DocumentListProps> = ({
                     {formatCurrency(calculateTotal(doc))}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end space-x-1">
+                    <div className="flex justify-end space-x-2">
                       <button onClick={() => handleExportPDF(doc)} className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl" title="PDF">📥</button>
                       <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl" title="Editar">✏️</button>
-                      <button onClick={() => setDocToDelete(doc.id)} className="p-2.5 text-rose-600 hover:bg-rose-50 rounded-xl" title="Borrar">🗑️</button>
+                      <button onClick={() => setDocToDelete(doc.id)} className="p-2.5 text-rose-600 hover:bg-rose-100 bg-rose-50/50 rounded-xl" title="Eliminar Definitivamente">🗑️</button>
                     </div>
                   </td>
                 </tr>
