@@ -8,7 +8,7 @@ import DocumentEditor from './components/DocumentEditor';
 import ClientManager from './components/ClientManager';
 import ProductManager from './components/ProductManager';
 import ExpenseManager from './components/ExpenseManager';
-import POS from './components/POS'; // Importado
+import POS from './components/POS';
 import Settings from './components/Settings';
 import { database } from './services/databaseService';
 import { Document, Client, Product, DocumentType, AppSettings, Expense, User, BackupData } from './types';
