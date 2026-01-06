@@ -75,9 +75,10 @@ export const exportToPDF = (doc: Document, client: Client | undefined, settings:
   pdf.text(`Emisión: ${doc.date}`, 140, 75);
   pdf.text(`Vence: ${doc.dueDate}`, 140, 82);
 
-  // 3. Tabla de Productos/Servicios
-  const tableHeaders = [['Descripción del Servicio / Producto', 'Cant.', 'V. Unitario', 'V. Total']];
+  // 3. Tabla de Productos/Servicios con Miniaturas
+  const tableHeaders = [['', 'Descripción', 'Cant.', 'V. Unitario', 'V. Total']];
   const tableData = doc.items.map(item => [
+    '', // Espacio para la imagen
     item.description,
     item.quantity.toString(),
     formatCurrency(item.unitPrice),
@@ -90,8 +91,30 @@ export const exportToPDF = (doc: Document, client: Client | undefined, settings:
     body: tableData,
     theme: 'grid',
     headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 10, halign: 'center' },
-    styles: { fontSize: 9, cellPadding: 5 },
-    columnStyles: { 0: { cellWidth: 90 }, 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } }
+    styles: { fontSize: 9, cellPadding: 5, valign: 'middle' },
+    columnStyles: { 
+      0: { cellWidth: 15 }, // Columna para la imagen
+      1: { cellWidth: 75 }, 
+      2: { halign: 'center' }, 
+      3: { halign: 'right' }, 
+      4: { halign: 'right' } 
+    },
+    didDrawCell: (data: any) => {
+      // Dibujar la imagen del producto si estamos en la primera columna del cuerpo
+      if (data.column.index === 0 && data.cell.section === 'body') {
+        const item = doc.items[data.row.index];
+        if (item.image) {
+          try {
+            const dim = 10;
+            const x = data.cell.x + (data.cell.width - dim) / 2;
+            const y = data.cell.y + (data.cell.height - dim) / 2;
+            pdf.addImage(item.image, 'PNG', x, y, dim, dim);
+          } catch (e) {
+            console.warn("Could not draw product image in PDF");
+          }
+        }
+      }
+    }
   });
 
   const finalY = (pdf as any).lastAutoTable.finalY || 130;
@@ -127,7 +150,7 @@ export const exportToPDF = (doc: Document, client: Client | undefined, settings:
   pdf.setFontSize(14);
   pdf.setFont('helvetica', 'bold');
   pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  pdf.text('NETO A PAGAR:', totalX, finalY + 42);
+  pdf.text('TOTAL A PAGAR:', totalX, finalY + 42);
   pdf.text(formatCurrency(net), 195, finalY + 42, { align: 'right' });
 
   // 5. Notas Legales y Firma

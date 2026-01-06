@@ -103,7 +103,10 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
             p.description.toLowerCase() === lowerValue || 
             (p.barcode && p.barcode.toLowerCase() === lowerValue)
           );
-          if (matchedProduct) updatedItem.unitPrice = matchedProduct.salePrice;
+          if (matchedProduct) {
+            updatedItem.unitPrice = matchedProduct.salePrice;
+            updatedItem.image = matchedProduct.image;
+          }
         }
         return updatedItem;
       }
@@ -118,6 +121,8 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
       if (matched) {
         updateItem(activeScannerItemId, 'description', matched.description);
         updateItem(activeScannerItemId, 'unitPrice', matched.salePrice);
+        const newItems = doc.items.map(it => it.id === activeScannerItemId ? { ...it, image: matched.image } : it);
+        setDoc({ ...doc, items: newItems });
       } else {
         updateItem(activeScannerItemId, 'description', code);
       }
@@ -151,7 +156,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     if (activeItemSelectorId) {
       const newItems = doc.items.map(item => {
         if (item.id === activeItemSelectorId) {
-          return { ...item, description: newProduct.description, unitPrice: newProduct.salePrice };
+          return { ...item, description: newProduct.description, unitPrice: newProduct.salePrice, image: newProduct.image };
         }
         return item;
       });
@@ -166,7 +171,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     if (!activeItemSelectorId) return;
     const newItems = doc.items.map(item => {
       if (item.id === activeItemSelectorId) {
-        return { ...item, description: product.description, unitPrice: product.salePrice };
+        return { ...item, description: product.description, unitPrice: product.salePrice, image: product.image };
       }
       return item;
     });
@@ -280,6 +285,11 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                         <button type="button" onClick={() => openCatalogFor(item.id)} className={`text-[9px] font-bold underline ${isCollection ? 'text-violet-600' : 'text-indigo-600'}`}>Catálogo / Nuevo</button>
                       </div>
                       <div className="flex gap-2">
+                        {item.image && (
+                          <div className="w-12 h-12 rounded-lg bg-white border border-gray-100 flex-shrink-0 overflow-hidden">
+                            <img src={item.image} alt="" className="w-full h-full object-cover" />
+                          </div>
+                        )}
                         <input 
                           type="text"
                           value={item.description}
@@ -352,7 +362,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
 
                 <div className="pt-6 border-t border-white/10 space-y-1">
                   <div className="flex justify-between items-baseline">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Total Neto a Cobrar</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Total a Pagar</span>
                     <span className="text-3xl font-black">{formatCurrency(netTotal)}</span>
                   </div>
                 </div>
@@ -431,7 +441,8 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
           </div>
         </div>
       )}
-
+      
+      {/* ... Rest of modals (QuickClient, QuickProduct) are the same ... */}
       {isQuickClientOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4">
           <div className="bg-white rounded-[40px] w-full max-w-lg overflow-hidden shadow-2xl animate-fadeIn">
