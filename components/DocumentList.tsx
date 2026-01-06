@@ -32,7 +32,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
   // Estados para Registro de Pago
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [activeDocForPayment, setActiveDocForPayment] = useState<Document | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState<string>('0');
+  const [paymentAmountStr, setPaymentAmountStr] = useState<string>('0');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
 
   const isCollection = type === DocumentType.ACCOUNT_COLLECTION;
@@ -78,20 +78,23 @@ const DocumentList: React.FC<DocumentListProps> = ({
     exportToPDF(doc, client, settings);
   };
 
-  const handleOpenPayment = (doc: Document) => {
+  const handleOpenPayment = (e: React.MouseEvent | React.TouchEvent, doc: Document) => {
+    // Evitamos propagación pero permitimos el comportamiento táctil nativo
+    if (e.stopPropagation) e.stopPropagation();
+    
     const total = calculateTotal(doc);
     const paid = calculatePaid(doc);
     const remaining = Math.max(0, total - paid);
     
     setActiveDocForPayment(doc);
-    setPaymentAmount(remaining.toString());
+    setPaymentAmountStr(remaining.toFixed(0));
     setPaymentMethod(doc.paymentMethod || 'Efectivo');
     setIsPaymentModalOpen(true);
   };
 
   const handleRegisterPayment = (e: React.FormEvent) => {
     e.preventDefault();
-    const amountNum = parseFloat(paymentAmount);
+    const amountNum = parseFloat(paymentAmountStr);
     
     if (!activeDocForPayment || isNaN(amountNum) || amountNum <= 0) {
       alert("Por favor, ingresa un monto válido.");
@@ -110,7 +113,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const docTotal = calculateTotal(activeDocForPayment);
 
     let newStatus = activeDocForPayment.status;
-    if (totalPaid >= docTotal - 0.5) { 
+    // Umbral de 1 unidad para cubrir redondeos
+    if (totalPaid >= docTotal - 1) { 
       newStatus = DocumentStatus.PAID;
     } else {
       newStatus = DocumentStatus.PARTIAL;
@@ -126,7 +130,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
     onUpdateDocument(updatedDoc);
     setIsPaymentModalOpen(false);
     setActiveDocForPayment(null);
-    alert("¡Pago registrado con éxito!");
+    // Usamos alert para confirmar en APK que el flujo terminó
+    setTimeout(() => alert("¡Pago registrado con éxito!"), 100);
   };
 
   const getRouteBase = (docType: DocumentType) => {
@@ -197,7 +202,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
           const total = calculateTotal(doc);
           const paid = calculatePaid(doc);
           const balance = total - paid;
-          const isPaid = balance <= 0.5;
+          // Si el balance es menor a 1, lo consideramos pagado para evitar botones innecesarios
+          const isPaid = balance < 1;
           
           return (
             <div key={doc.id} className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm space-y-4">
@@ -224,19 +230,19 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   {!isPaid && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
                     <button 
                       type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleOpenPayment(doc); }} 
-                      className="w-16 h-16 flex items-center justify-center bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-200 active:scale-90 transition-all z-10"
+                      onClick={(e) => handleOpenPayment(e, doc)} 
+                      className="w-16 h-16 flex items-center justify-center bg-emerald-600 text-white rounded-2xl shadow-xl shadow-emerald-200 active:bg-emerald-700 active:scale-95 transition-all z-10 pointer-events-auto"
                     >
-                      <span className="text-2xl">💸</span>
+                      <span className="text-2xl pointer-events-none">💸</span>
                     </button>
                   )}
-                  <button onClick={() => handleExportPDF(doc)} className="w-12 h-12 flex items-center justify-center bg-slate-100 text-slate-600 rounded-2xl">📥</button>
+                  <button onClick={() => handleExportPDF(doc)} className="w-12 h-12 flex items-center justify-center bg-slate-100 text-slate-600 rounded-2xl active:bg-slate-200">📥</button>
                 </div>
               </div>
               
               <div className="grid grid-cols-2 gap-2 pt-2">
-                <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="py-3 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase tracking-widest">Editar</button>
-                <button onClick={() => setDocToDelete(doc.id)} className="py-3 bg-rose-50 text-rose-600 rounded-2xl font-black text-[10px] uppercase tracking-widest">Borrar</button>
+                <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="py-3 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase tracking-widest active:bg-blue-100">Editar</button>
+                <button onClick={() => setDocToDelete(doc.id)} className="py-3 bg-rose-50 text-rose-600 rounded-2xl font-black text-[10px] uppercase tracking-widest active:bg-rose-100">Borrar</button>
               </div>
             </div>
           );
@@ -261,7 +267,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                  const total = calculateTotal(doc);
                  const paid = calculatePaid(doc);
                  const balance = total - paid;
-                 const isPaid = balance <= 0.5;
+                 const isPaid = balance < 1;
 
                  return (
                 <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors group">
@@ -278,7 +284,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end space-x-2">
                       {!isPaid && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
-                        <button onClick={() => handleOpenPayment(doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all">💸</button>
+                        <button onClick={(e) => handleOpenPayment(e, doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Cobrar">💸</button>
                       )}
                       <button onClick={() => handleExportPDF(doc)} className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">📥</button>
                       <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-all">✏️</button>
@@ -292,11 +298,17 @@ const DocumentList: React.FC<DocumentListProps> = ({
         </div>
       </div>
 
-      {/* MODAL DE PAGO UNIVERSAL (Z-INDEX EXTREMO PARA APK) */}
+      {filteredDocs.length === 0 && (
+        <div className="py-24 text-center bg-white rounded-[40px] border border-gray-100 border-dashed mx-4">
+          <p className="text-gray-400 font-bold">No se encontraron documentos registrados.</p>
+        </div>
+      )}
+
+      {/* MODAL DE PAGO UNIVERSAL (Z-INDEX EXTREMO Y POSICIONAMIENTO FIJO) */}
       {isPaymentModalOpen && activeDocForPayment && (
         <div 
-          className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center p-4" 
-          style={{ zIndex: 99999 }}
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4" 
+          style={{ zIndex: 999999, position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
           onClick={() => setIsPaymentModalOpen(false)}
         >
           <div 
@@ -306,7 +318,13 @@ const DocumentList: React.FC<DocumentListProps> = ({
             <div className="bg-emerald-600 p-8 text-white relative">
               <h3 className="text-2xl font-black tracking-tight">Cobrar Ahora</h3>
               <p className="text-emerald-100 text-[10px] font-black uppercase tracking-widest mt-1">Doc No. {activeDocForPayment.number}</p>
-              <button onClick={() => setIsPaymentModalOpen(false)} className="absolute top-6 right-6 text-white/60 hover:text-white text-2xl p-2">✕</button>
+              <button 
+                type="button"
+                onClick={() => setIsPaymentModalOpen(false)} 
+                className="absolute top-6 right-6 text-white/60 hover:text-white text-2xl p-2 active:scale-90"
+              >
+                ✕
+              </button>
             </div>
             
             <form onSubmit={handleRegisterPayment} className="p-8 space-y-6">
@@ -324,8 +342,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   autoFocus
                   required
                   step="any"
-                  value={paymentAmount} 
-                  onChange={e => setPaymentAmount(e.target.value)}
+                  value={paymentAmountStr} 
+                  onChange={e => setPaymentAmountStr(e.target.value)}
                   className="w-full p-5 bg-gray-50 border-2 border-transparent focus:border-emerald-500 rounded-2xl font-black text-3xl text-emerald-600 outline-none transition-all"
                 />
               </div>
@@ -335,7 +353,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 <select 
                   value={paymentMethod} 
                   onChange={e => setPaymentMethod(e.target.value)}
-                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none"
+                  className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="Efectivo">Efectivo</option>
                   <option value="Transferencia">Transferencia Bancaria</option>
@@ -348,14 +366,14 @@ const DocumentList: React.FC<DocumentListProps> = ({
               <div className="flex flex-col gap-3 pt-2">
                 <button 
                   type="submit"
-                  className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black shadow-xl shadow-emerald-200 active:scale-95 transition-all uppercase tracking-widest text-xs"
+                  className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black shadow-xl shadow-emerald-200 active:bg-emerald-700 active:scale-95 transition-all uppercase tracking-widest text-xs"
                 >
                   Confirmar Recibo
                 </button>
                 <button 
                   type="button"
                   onClick={() => setIsPaymentModalOpen(false)} 
-                  className="w-full py-2 font-bold text-gray-400 hover:text-gray-600"
+                  className="w-full py-2 font-bold text-gray-400 hover:text-gray-600 active:text-gray-800"
                 >
                   Cerrar
                 </button>

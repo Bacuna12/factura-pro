@@ -59,13 +59,14 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
     exportToPDF(doc, client, settings);
   };
 
-  const handleOpenPayment = (doc: Document) => {
+  const handleOpenPayment = (e: React.MouseEvent | React.TouchEvent, doc: Document) => {
+    if (e.stopPropagation) e.stopPropagation();
     const total = calculateTotal(doc);
     const paid = calculatePaidAmount(doc);
     const remaining = Math.max(0, total - paid);
     
     setActiveDocForPayment(doc);
-    setPaymentAmount(remaining.toString());
+    setPaymentAmount(remaining.toFixed(0));
     setPaymentMethod(doc.paymentMethod || 'Efectivo');
     setIsPaymentModalOpen(true);
   };
@@ -87,13 +88,13 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
     const docTotal = calculateTotal(activeDocForPayment);
 
     let newStatus = activeDocForPayment.status;
-    if (totalPaid >= docTotal - 0.5) newStatus = DocumentStatus.PAID;
+    if (totalPaid >= docTotal - 1) newStatus = DocumentStatus.PAID;
     else if (totalPaid > 0) newStatus = DocumentStatus.PARTIAL;
 
     onUpdateDoc({ ...activeDocForPayment, payments: updatedPayments, status: newStatus, paymentMethod });
     setIsPaymentModalOpen(false);
     setActiveDocForPayment(null);
-    alert("Pago registrado correctamente");
+    setTimeout(() => alert("¡Pago registrado correctamente!"), 100);
   };
 
   const getRouteBase = (docType: DocumentType) => {
@@ -118,6 +119,7 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
       {isPaymentModalOpen && activeDocForPayment && (
         <div 
           className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[99999] flex items-center justify-center p-4"
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}
           onClick={() => setIsPaymentModalOpen(false)}
         >
           <div 
@@ -152,7 +154,7 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
                 <option value="Nequi">Nequi</option>
                 <option value="Daviplata">Daviplata</option>
               </select>
-              <button type="submit" className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black shadow-lg">Confirmar Pago</button>
+              <button type="submit" className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black shadow-lg active:bg-emerald-700">Confirmar Pago</button>
               <button type="button" onClick={() => setIsPaymentModalOpen(false)} className="w-full py-2 text-gray-400 font-bold">Cancelar</button>
             </form>
           </div>
@@ -193,7 +195,7 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
                 {documents.slice(0, 8).map(doc => {
                   const total = calculateTotal(doc);
                   const paid = calculatePaidAmount(doc);
-                  const isPaid = (total - paid) <= 0.5;
+                  const isPaid = (total - paid) < 1;
                   
                   return (
                   <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors group">
@@ -215,7 +217,7 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end space-x-1">
                          {!isPaid && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
-                            <button onClick={() => handleOpenPayment(doc)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg">💸</button>
+                            <button onClick={(e) => handleOpenPayment(e, doc)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg active:scale-90 transition-all">💸</button>
                          )}
                          <button onClick={() => handleExportPDF(doc)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg">📥</button>
                          <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button>
