@@ -67,6 +67,15 @@ export const exportToPDF = (doc: Document, client: Client | undefined, settings:
       ], 15, 71);
     }
 
+    // Método de Pago (Nueva Sección en PDF)
+    if (doc.paymentMethod) {
+      pdf.setTextColor(30, 41, 59);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('MÉTODO DE PAGO:', 140, 65);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(doc.paymentMethod, 140, 71);
+    }
+
     // Tabla de Contenido
     const tableHeaders = [['Ref', 'Descripción', 'Cant.', 'Unitario', 'Total']];
     const tableData = doc.items.map((item, idx) => [
@@ -140,6 +149,6 @@ export const exportToPDF = (doc: Document, client: Client | undefined, settings:
     pdf.save(`${doc.type}_${doc.number}.pdf`);
   } catch (err) {
     console.error("PDF Generation Error:", err);
-    alert("Error al generar el PDF. Verifica que los datos sean correctos.");
+    alert("Error al generar el PDF.");
   }
 };

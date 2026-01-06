@@ -82,6 +82,7 @@ export interface Document {
   withholdingRate?: number;
   logo?: string;
   payments?: Payment[];
+  paymentMethod?: string; // Nuevo campo
 }
 
 export interface AppSettings {

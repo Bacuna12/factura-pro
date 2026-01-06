@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Document, DocumentType, DocumentStatus, Client, AppSettings, Product } from '../types';
+import { Document, DocumentType, DocumentStatus, Client, AppSettings, Product, Payment } from '../types';
 import { exportToPDF } from '../services/pdfService';
 import ConfirmModal from './ConfirmModal';
 
@@ -21,12 +21,19 @@ const DocumentList: React.FC<DocumentListProps> = ({
   documents, 
   clients, 
   settings, 
-  onDelete, 
+  onDelete,
+  onUpdateDocument
 }) => {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | DocumentStatus>('ALL');
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
+  
+  // Estados para Registro de Pago
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [activeDocForPayment, setActiveDocForPayment] = useState<Document | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState('Efectivo');
 
   const isCollection = type === DocumentType.ACCOUNT_COLLECTION;
 
@@ -39,6 +46,10 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const gross = subtotal + tax;
     const withholding = gross * ((doc.withholdingRate || 0) / 100);
     return gross - withholding;
+  };
+
+  const calculatePaid = (doc: Document) => {
+    return (doc.payments || []).reduce((acc, p) => acc + p.amount, 0);
   };
 
   const formatCurrency = (amount: number) => {
@@ -67,6 +78,45 @@ const DocumentList: React.FC<DocumentListProps> = ({
     exportToPDF(doc, client, settings);
   };
 
+  const handleOpenPayment = (doc: Document) => {
+    setActiveDocForPayment(doc);
+    const remaining = calculateTotal(doc) - calculatePaid(doc);
+    setPaymentAmount(remaining);
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleRegisterPayment = () => {
+    if (!activeDocForPayment) return;
+
+    const newPayment: Payment = {
+      id: Math.random().toString(36).substr(2, 9),
+      date: new Date().toISOString().split('T')[0],
+      amount: paymentAmount,
+      method: paymentMethod
+    };
+
+    const updatedPayments = [...(activeDocForPayment.payments || []), newPayment];
+    const totalPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+    const docTotal = calculateTotal(activeDocForPayment);
+
+    let newStatus = activeDocForPayment.status;
+    if (totalPaid >= docTotal) {
+      newStatus = DocumentStatus.PAID;
+    } else if (totalPaid > 0) {
+      newStatus = DocumentStatus.PARTIAL;
+    }
+
+    const updatedDoc = {
+      ...activeDocForPayment,
+      payments: updatedPayments,
+      status: newStatus
+    };
+
+    onUpdateDocument(updatedDoc);
+    setIsPaymentModalOpen(false);
+    setActiveDocForPayment(null);
+  };
+
   const getRouteBase = (docType: DocumentType) => {
     if (docType === DocumentType.INVOICE) return '/invoices';
     if (docType === DocumentType.ACCOUNT_COLLECTION) return '/collections';
@@ -79,6 +129,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
         ? 'bg-emerald-100 text-emerald-700' 
         : status === DocumentStatus.REJECTED 
         ? 'bg-rose-100 text-rose-700'
+        : status === DocumentStatus.PARTIAL
+        ? 'bg-blue-100 text-blue-700'
         : 'bg-amber-100 text-amber-700'
     }`}>
       {status}
@@ -97,6 +149,46 @@ const DocumentList: React.FC<DocumentListProps> = ({
         }}
         onCancel={() => setDocToDelete(null)}
       />
+
+      {/* Modal de Registro de Pago */}
+      {isPaymentModalOpen && activeDocForPayment && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden animate-slideUp">
+            <div className="bg-emerald-600 p-6 text-white">
+              <h3 className="text-xl font-black">Registrar Pago</h3>
+              <p className="text-emerald-100 text-xs">Doc: {activeDocForPayment.number}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Monto del Pago</label>
+                <input 
+                  type="number" 
+                  value={paymentAmount} 
+                  onChange={e => setPaymentAmount(parseFloat(e.target.value))}
+                  className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-black text-2xl text-emerald-600"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Método</label>
+                <select 
+                  value={paymentMethod} 
+                  onChange={e => setPaymentMethod(e.target.value)}
+                  className="w-full p-4 bg-gray-50 rounded-2xl font-bold"
+                >
+                  <option value="Efectivo">Efectivo</option>
+                  <option value="Transferencia">Transferencia</option>
+                  <option value="Nequi/Daviplata">Nequi/Daviplata</option>
+                  <option value="Tarjeta">Tarjeta</option>
+                </select>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button onClick={() => setIsPaymentModalOpen(false)} className="flex-1 py-4 font-bold text-gray-400">Cancelar</button>
+                <button onClick={handleRegisterPayment} className="flex-2 py-4 px-6 bg-emerald-600 text-white rounded-2xl font-black shadow-lg shadow-emerald-100">Confirmar Pago</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
@@ -125,46 +217,45 @@ const DocumentList: React.FC<DocumentListProps> = ({
             className="w-full pl-12 pr-4 py-3 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm"
           />
         </div>
-        <select 
-          value={statusFilter} 
-          onChange={e => setStatusFilter(e.target.value as any)}
-          className="px-4 py-3 bg-gray-50 rounded-2xl font-black text-xs uppercase outline-none min-w-[160px]"
-        >
-          <option value="ALL">Todos los estados</option>
-          {Object.values(DocumentStatus).map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
       </div>
 
       {/* VISTA MÓVIL (CARDS) */}
       <div className="grid grid-cols-1 gap-4 md:hidden">
-        {filteredDocs.map(doc => (
-          <div key={doc.id} className="bg-white p-5 rounded-[28px] border border-gray-100 shadow-sm space-y-4">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className={`font-black text-lg ${isCollection ? 'text-violet-700' : 'text-gray-900'}`}>#{doc.number}</p>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{doc.date}</p>
+        {filteredDocs.map(doc => {
+          const total = calculateTotal(doc);
+          const paid = calculatePaid(doc);
+          const balance = total - paid;
+          return (
+            <div key={doc.id} className="bg-white p-5 rounded-[28px] border border-gray-100 shadow-sm space-y-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className={`font-black text-lg ${isCollection ? 'text-violet-700' : 'text-gray-900'}`}>#{doc.number}</p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{doc.date}</p>
+                </div>
+                <StatusBadge status={doc.status} />
               </div>
-              <StatusBadge status={doc.status} />
-            </div>
-            
-            <div className="space-y-1">
-              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Cliente</p>
-              <p className="font-bold text-gray-800">{getClientName(doc.clientId)}</p>
-            </div>
+              
+              <div className="space-y-1">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Cliente</p>
+                <p className="font-bold text-gray-800">{getClientName(doc.clientId)}</p>
+              </div>
 
-            <div className="flex justify-between items-end pt-4 border-t border-gray-50">
-              <div>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</p>
-                <p className="text-xl font-black text-gray-900">{formatCurrency(calculateTotal(doc))}</p>
-              </div>
-              <div className="flex space-x-2">
-                <button onClick={() => handleExportPDF(doc)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl" title="Descargar PDF">📥</button>
-                <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-3 bg-blue-50 text-blue-600 rounded-xl" title="Editar">✏️</button>
-                <button onClick={() => setDocToDelete(doc.id)} className="p-3 bg-rose-50 text-rose-600 rounded-xl" title="Eliminar Factura">🗑️</button>
+              <div className="flex justify-between items-end pt-4 border-t border-gray-50">
+                <div>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</p>
+                  <p className="text-xl font-black text-gray-900">{formatCurrency(total)}</p>
+                  {balance > 0 && <p className="text-[9px] font-black text-orange-600 uppercase">Saldo: {formatCurrency(balance)}</p>}
+                </div>
+                <div className="flex space-x-2">
+                  <button onClick={() => handleOpenPayment(doc)} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl" title="Registrar Pago">💸</button>
+                  <button onClick={() => handleExportPDF(doc)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">📥</button>
+                  <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-3 bg-blue-50 text-blue-600 rounded-xl">✏️</button>
+                  <button onClick={() => setDocToDelete(doc.id)} className="p-3 bg-rose-50 text-rose-600 rounded-xl">🗑️</button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* VISTA ESCRITORIO (TABLA) */}
@@ -176,12 +267,16 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 <th className="px-6 py-4">Documento</th>
                 <th className="px-6 py-4">Cliente / Fecha</th>
                 <th className="px-6 py-4">Estado</th>
-                <th className="px-6 py-4">Total a Pagar</th>
+                <th className="px-6 py-4">Total / Saldo</th>
                 <th className="px-6 py-4 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredDocs.map(doc => (
+              {filteredDocs.map(doc => {
+                 const total = calculateTotal(doc);
+                 const paid = calculatePaid(doc);
+                 const balance = total - paid;
+                 return (
                 <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors group">
                   <td className={`px-6 py-4 font-bold ${isCollection ? 'text-violet-700' : 'text-gray-900'}`}>#{doc.number}</td>
                   <td className="px-6 py-4">
@@ -191,28 +286,24 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   <td className="px-6 py-4">
                     <StatusBadge status={doc.status} />
                   </td>
-                  <td className="px-6 py-4 font-black text-gray-900">
-                    {formatCurrency(calculateTotal(doc))}
+                  <td className="px-6 py-4">
+                    <p className="font-black text-gray-900">{formatCurrency(total)}</p>
+                    {balance > 0 && <p className="text-[9px] font-black text-orange-600 uppercase tracking-tighter">Saldo: {formatCurrency(balance)}</p>}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end space-x-2">
+                      <button onClick={() => handleOpenPayment(doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl" title="Cobrar / Registrar Pago">💸</button>
                       <button onClick={() => handleExportPDF(doc)} className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl" title="PDF">📥</button>
                       <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl" title="Editar">✏️</button>
-                      <button onClick={() => setDocToDelete(doc.id)} className="p-2.5 text-rose-600 hover:bg-rose-100 bg-rose-50/50 rounded-xl" title="Eliminar Definitivamente">🗑️</button>
+                      <button onClick={() => setDocToDelete(doc.id)} className="p-2.5 text-rose-600 hover:bg-rose-100 bg-rose-50/50 rounded-xl" title="Eliminar">🗑️</button>
                     </div>
                   </td>
                 </tr>
-              ))}
+              )})}
             </tbody>
           </table>
         </div>
       </div>
-
-      {filteredDocs.length === 0 && (
-        <div className="py-20 text-center bg-white rounded-[32px] border border-gray-100">
-          <p className="text-gray-400 font-medium">No se encontraron registros de {type.toLowerCase()}s.</p>
-        </div>
-      )}
     </div>
   );
 };
