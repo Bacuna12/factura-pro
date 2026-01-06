@@ -98,9 +98,9 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
       if (item.id === id) {
         const updatedItem = { ...item, [field]: value };
         if (field === 'description') {
-          const lowerValue = value.toLowerCase();
+          const lowerValue = value.toLowerCase().trim();
           const matchedProduct = products.find(p => 
-            p.description.toLowerCase() === lowerValue || 
+            p.description.toLowerCase().trim() === lowerValue || 
             (p.barcode && p.barcode.toLowerCase() === lowerValue)
           );
           if (matchedProduct) {
@@ -119,9 +119,12 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     if (scannerTarget === 'ITEM' && activeScannerItemId) {
       const matched = products.find(p => p.barcode === code);
       if (matched) {
-        updateItem(activeScannerItemId, 'description', matched.description);
-        updateItem(activeScannerItemId, 'unitPrice', matched.salePrice);
-        const newItems = doc.items.map(it => it.id === activeScannerItemId ? { ...it, image: matched.image } : it);
+        const newItems = doc.items.map(it => it.id === activeScannerItemId ? { 
+          ...it, 
+          description: matched.description, 
+          unitPrice: matched.salePrice,
+          image: matched.image
+        } : it);
         setDoc({ ...doc, items: newItems });
       } else {
         updateItem(activeScannerItemId, 'description', code);
@@ -199,6 +202,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("Iniciando guardado de documento:", doc);
     onSave(doc);
     if (type === DocumentType.INVOICE) navigate('/invoices');
     else if (type === DocumentType.ACCOUNT_COLLECTION) navigate('/collections');
@@ -376,7 +380,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
         </div>
       </form>
 
-      {/* MODALS */}
+      {/* MODALES FUERA DEL FORMULARIO PARA EVITAR INTERFERENCIAS */}
       {isProductSelectorOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[150] flex items-center justify-center p-4">
           <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden animate-slideUp">
@@ -441,8 +445,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
           </div>
         </div>
       )}
-      
-      {/* ... Rest of modals (QuickClient, QuickProduct) are the same ... */}
+
       {isQuickClientOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4">
           <div className="bg-white rounded-[40px] w-full max-w-lg overflow-hidden shadow-2xl animate-fadeIn">
