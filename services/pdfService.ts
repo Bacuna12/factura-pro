@@ -3,6 +3,8 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Document, Client, Product, DocumentType, AppSettings, Expense, DocumentStatus } from '../types';
 
+type ColorTuple = [number, number, number];
+
 const formatCurrencyHelper = (amount: number, currency: string) => {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
@@ -44,7 +46,7 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     
   const formatCurrency = (amount: number) => formatCurrencyHelper(amount, settings.currency);
 
-  const colors = {
+  const colors: Record<string, ColorTuple> = {
     primary: isCollection ? [124, 58, 237] : [37, 99, 235],
     secondary: [241, 245, 249],
     text: [30, 41, 59],
@@ -89,8 +91,8 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
         formatCurrency(i.quantity * i.unitPrice)
       ]),
       theme: 'plain',
-      styles: { fontSize: 7, cellPadding: 1, textAlpha: 0.8 },
-      headStyles: { fontStyle: 'bold', borderBottom: { lineWidth: 0.1 } },
+      styles: { fontSize: 7, cellPadding: 1 },
+      headStyles: { fontStyle: 'bold' },
       columnStyles: { 1: { halign: 'right' } },
       margin: { left: 5, right: 5 }
     });
@@ -115,7 +117,8 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
 
   } else {
     // --- DISEÑO CARTA PROFESIONAL ---
-    pdf.setFillColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    const primary = colors.primary;
+    pdf.setFillColor(primary[0], primary[1], primary[2]);
     pdf.rect(0, 0, 210, 45, 'F');
     if (settings.logo) {
       try { pdf.addImage(settings.logo, 'PNG', 15, 10, 25, 25); } catch (e) {}
@@ -131,18 +134,19 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
 
     pdf.setFillColor(255, 255, 255);
     pdf.roundedRect(145, 10, 50, 25, 3, 3, 'F');
-    pdf.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    pdf.setTextColor(primary[0], primary[1], primary[2]);
     pdf.setFontSize(10);
     pdf.setFont('helvetica', 'bold');
     pdf.text(doc.type, 170, 18, { align: 'center' });
     pdf.setFontSize(14);
     pdf.text(doc.number, 170, 27, { align: 'center' });
 
-    pdf.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+    const textCol = colors.text;
+    pdf.setTextColor(textCol[0], textCol[1], textCol[2]);
     pdf.setFontSize(11);
     pdf.setFont('helvetica', 'bold');
     pdf.text('INFORMACIÓN DEL CLIENTE', 15, 60);
-    pdf.setDrawColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    pdf.setDrawColor(primary[0], primary[1], primary[2]);
     pdf.setLineWidth(0.8);
     pdf.line(15, 62, 50, 62);
 
@@ -170,7 +174,7 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
         formatCurrency(i.unitPrice),
         formatCurrency(i.quantity * i.unitPrice)
       ]),
-      headStyles: { fillColor: colors.primary, textColor: colors.white, fontStyle: 'bold', fontSize: 10 },
+      headStyles: { fillColor: primary, textColor: colors.white, fontStyle: 'bold', fontSize: 10 },
       styles: { fontSize: 9, cellPadding: 5 },
       columnStyles: { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
       alternateRowStyles: { fillColor: colors.secondary },
@@ -182,7 +186,7 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     const tax = subtotal * (doc.taxRate / 100);
     const total = subtotal + tax;
 
-    pdf.setFillColor(colors.text[0], colors.text[1], colors.text[2]);
+    pdf.setFillColor(textCol[0], textCol[1], textCol[2]);
     pdf.roundedRect(130, finalY, 65, 35, 3, 3, 'F');
     pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(8);
@@ -196,7 +200,8 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     pdf.text(formatCurrency(total), 190, finalY + 28, { align: 'right' });
     
     if (doc.notes) {
-      pdf.setTextColor(colors.lightText[0], colors.lightText[1], colors.lightText[2]);
+      const lightTxt = colors.lightText;
+      pdf.setTextColor(lightTxt[0], lightTxt[1], lightTxt[2]);
       pdf.setFontSize(8);
       pdf.text('OBSERVACIONES:', 15, finalY + 5);
       const splitNotes = pdf.splitTextToSize(doc.notes, 100);
@@ -206,8 +211,8 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     // Firma Digital si existe
     if (doc.signature) {
       finalY = Math.max(finalY + 45, 250);
-      pdf.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-      pdf.setDrawColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+      pdf.setTextColor(textCol[0], textCol[1], textCol[2]);
+      pdf.setDrawColor(primary[0], primary[1], primary[2]);
       pdf.line(15, finalY, 75, finalY);
       pdf.setFontSize(8);
       pdf.text('FIRMA AUTORIZADA / CLIENTE', 15, finalY + 5);

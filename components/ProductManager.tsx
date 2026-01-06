@@ -1,10 +1,11 @@
 
 import React, { useState, useMemo, useRef } from 'react';
-import { Product, AppSettings } from '../types';
+import { Product, AppSettings, User } from '../types';
 import { optimizeProductListing } from '../services/geminiService';
 import ConfirmModal from './ConfirmModal';
 
 interface ProductManagerProps {
+  user: User;
   products: Product[];
   onUpdateProducts: (products: Product[]) => void;
   settings: AppSettings;
