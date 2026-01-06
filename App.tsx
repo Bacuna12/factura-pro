@@ -5,7 +5,6 @@ import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import DocumentList from './components/DocumentList';
 import DocumentEditor from './components/DocumentEditor';
-import DocumentHistory from './components/DocumentHistory';
 import ClientManager from './components/ClientManager';
 import ProductManager from './components/ProductManager';
 import ExpenseManager from './components/ExpenseManager';
@@ -22,10 +21,10 @@ const DEFAULT_USER: User = {
 const INITIAL_CLIENTS: Client[] = [
   { 
     id: '1', 
-    name: 'Acme Corp', 
-    email: 'billing@acme.com', 
-    taxId: '900.123.456-1', 
-    address: 'Calle 100 #15-20, Bogotá',
+    name: 'Cliente Ejemplo', 
+    email: 'ejemplo@correo.com', 
+    taxId: '123456789', 
+    address: 'Calle Principal 123',
     city: 'Bogotá',
     municipality: 'Cundinamarca',
     zipCode: '110111'
@@ -36,7 +35,7 @@ const INITIAL_SETTINGS: AppSettings = {
   currency: 'COP',
   companyName: 'FacturaPro S.A.S.',
   companyId: '900.000.000-0',
-  companyAddress: 'Av. Empresarial 123',
+  companyAddress: 'Sede Principal',
   defaultTaxRate: 19
 };
 
@@ -57,7 +56,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
   });
 
-  // Persistencia explícita
+  // Guardado persistente automático
   useEffect(() => { localStorage.setItem('facturapro_docs', JSON.stringify(documents)); }, [documents]);
   useEffect(() => { localStorage.setItem('facturapro_expenses', JSON.stringify(expenses)); }, [expenses]);
   useEffect(() => { localStorage.setItem('facturapro_clients', JSON.stringify(clients)); }, [clients]);
@@ -67,36 +66,42 @@ const App: React.FC = () => {
   const handleImportData = (data: BackupData) => database.restoreDatabase(data);
 
   const handleSaveDocument = (doc: Document) => {
-    const isNew = !documents.find(d => d.id === doc.id);
-    
-    // 1. Deducir Stock si es nuevo e invoice/cuenta cobro
-    if (isNew && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION)) {
-      setProducts(prevProducts => {
-        return prevProducts.map(p => {
-          const matchedItem = doc.items.find(item => 
-            item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
-            (p.barcode && item.description === p.barcode)
-          );
-          if (matchedItem) {
-            return { ...p, stock: (p.stock || 0) - matchedItem.quantity };
-          }
-          return p;
-        });
-      });
-    }
-
-    // 2. Guardar Documento
     setDocuments(prevDocs => {
-      const exists = prevDocs.find(d => d.id === doc.id);
-      if (exists) {
-        return prevDocs.map(d => d.id === doc.id ? doc : d);
+      const existingIndex = prevDocs.findIndex(d => d.id === doc.id);
+      let newDocs;
+      
+      if (existingIndex >= 0) {
+        newDocs = [...prevDocs];
+        newDocs[existingIndex] = doc;
       } else {
-        return [doc, ...prevDocs];
+        newDocs = [doc, ...prevDocs];
+        
+        // Lógica de stock solo para documentos nuevos de salida
+        if (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) {
+          setProducts(prevProducts => prevProducts.map(p => {
+            const matchedItem = doc.items.find(item => 
+              item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
+              (p.barcode && item.description === p.barcode)
+            );
+            return matchedItem ? { ...p, stock: (p.stock || 0) - matchedItem.quantity } : p;
+          }));
+        }
       }
+      
+      // Persistir inmediatamente para evitar pérdida por navegación rápida
+      localStorage.setItem('facturapro_docs', JSON.stringify(newDocs));
+      return newDocs;
     });
   };
 
-  const handleDeleteDocument = (id: string) => setDocuments(prev => prev.filter(d => d.id !== id));
+  const handleDeleteDocument = (id: string) => {
+    setDocuments(prev => {
+      const updated = prev.filter(d => d.id !== id);
+      localStorage.setItem('facturapro_docs', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   const handleUpdateClients = (newClients: Client[]) => setClients(newClients);
   const handleUpdateProducts = (newProducts: Product[]) => setProducts(newProducts);
   const handleUpdateExpenses = (newExpenses: Expense[]) => setExpenses(newExpenses);
@@ -108,8 +113,6 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<Dashboard documents={documents} expenses={expenses} clientsCount={clients.length} settings={settings} />} />
           
-          <Route path="/history" element={<DocumentHistory documents={documents} clients={clients} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} />} />
-
           <Route path="/invoices" element={<DocumentList type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
           <Route path="/invoices/new" element={<DocumentEditor key="new-invoice" type={DocumentType.INVOICE} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
           <Route path="/invoices/edit/:id" element={<EditDocumentWrapper type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} />} />

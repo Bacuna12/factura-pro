@@ -11,7 +11,6 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, user }) => {
   const navItems = [
     { path: '/', label: 'Panel', icon: '📊' },
-    { path: '/history', label: 'Historial', icon: '📜' },
     { path: '/invoices', label: 'Facturas', icon: '🧾' },
     { path: '/collections', label: 'Cuentas Cobro', icon: '📝' },
     { path: '/quotes', label: 'Presupuestos', icon: '📄' },
@@ -56,7 +55,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
         </nav>
 
         <div className="mt-auto pt-6 border-t border-slate-800">
-          <div className="bg-slate-800/50 p-4 rounded-2xl">
+          <div className="bg-slate-800/50 p-4 rounded-2xl text-center">
             <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Usuario</p>
             <p className="text-sm text-slate-200 font-bold truncate">{user.name}</p>
           </div>

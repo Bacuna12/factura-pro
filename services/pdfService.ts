@@ -1,182 +1,145 @@
 
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { Document, Client, DocumentType, AppSettings } from '../types';
 
 export const exportToPDF = (doc: Document, client: Client | undefined, settings: AppSettings) => {
-  const pdf = new jsPDF();
-  const isInvoice = doc.type === DocumentType.INVOICE;
-  const isCollection = doc.type === DocumentType.ACCOUNT_COLLECTION;
+  try {
+    const pdf = new jsPDF();
+    const isInvoice = doc.type === DocumentType.INVOICE;
+    const isCollection = doc.type === DocumentType.ACCOUNT_COLLECTION;
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: settings.currency,
-      minimumFractionDigits: 0
-    }).format(amount);
-  };
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: settings.currency,
+        minimumFractionDigits: 0
+      }).format(amount);
+    };
 
-  // Colores Corporativos dinámicos
-  let primaryColor = [71, 85, 105]; // Gris (Presupuesto)
-  if (isInvoice) primaryColor = [37, 99, 235]; // Azul (Factura)
-  if (isCollection) primaryColor = [124, 58, 237]; // Púrpura (Cuenta de Cobro)
+    // Colores Corporativos
+    let primaryColor: [number, number, number] = [71, 85, 105]; // Gris
+    if (isInvoice) primaryColor = [37, 99, 235]; // Azul
+    if (isCollection) primaryColor = [124, 58, 237]; // Púrpura
 
-  const accentColor = [241, 245, 249]; 
-  
-  // 1. Cabecera Estilo "Hero"
-  pdf.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  pdf.rect(0, 0, 210, 50, 'F');
-  
-  const logoToUse = doc.logo || settings.logo;
-  if (logoToUse) {
-    try {
-      pdf.addImage(logoToUse, 'PNG', 15, 10, 30, 30);
-    } catch (e) { /* fallback if image error */ }
-  }
-
-  pdf.setTextColor(255, 255, 255);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(22);
-  pdf.text(settings.companyName, 50, 25);
-  pdf.setFontSize(10);
-  pdf.setFont('helvetica', 'normal');
-  pdf.text(`ID/NIT: ${settings.companyId}`, 50, 32);
-  pdf.text(settings.companyAddress, 50, 37);
-
-  pdf.setFontSize(isCollection ? 18 : 20);
-  pdf.setFont('helvetica', 'bold');
-  pdf.text(doc.type.toUpperCase(), 195, 25, { align: 'right' });
-  pdf.setFontSize(12);
-  pdf.text(`No. ${doc.number}`, 195, 32, { align: 'right' });
-
-  // 2. Información Comercial
-  pdf.setTextColor(30, 41, 59);
-  pdf.setFontSize(9);
-  pdf.setFont('helvetica', 'bold');
-  pdf.text('CLIENTE / RECEPTOR:', 15, 65);
-  pdf.setFont('helvetica', 'normal');
-  pdf.setTextColor(71, 85, 105);
-  if (client) {
-    pdf.text([
-      client.name,
-      `NIT/CC: ${client.taxId}`,
-      client.address,
-      `${client.city}, ${client.municipality}`,
-      `Email: ${client.email}`
-    ], 15, 72);
-  }
-
-  pdf.setFillColor(accentColor[0], accentColor[1], accentColor[2]);
-  pdf.roundedRect(135, 60, 60, 30, 3, 3, 'F');
-  pdf.setTextColor(30, 41, 59);
-  pdf.setFont('helvetica', 'bold');
-  pdf.text('RESUMEN:', 140, 68);
-  pdf.setFont('helvetica', 'normal');
-  pdf.text(`Emisión: ${doc.date}`, 140, 75);
-  pdf.text(`Vence: ${doc.dueDate}`, 140, 82);
-
-  // 3. Tabla de Productos/Servicios con Miniaturas
-  const tableHeaders = [['', 'Descripción', 'Cant.', 'V. Unitario', 'V. Total']];
-  const tableData = doc.items.map(item => [
-    '', // Espacio para la imagen
-    item.description,
-    item.quantity.toString(),
-    formatCurrency(item.unitPrice),
-    formatCurrency(item.quantity * item.unitPrice)
-  ]);
-
-  (pdf as any).autoTable({
-    startY: 105,
-    head: tableHeaders,
-    body: tableData,
-    theme: 'grid',
-    headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 10, halign: 'center' },
-    styles: { fontSize: 9, cellPadding: 5, valign: 'middle' },
-    columnStyles: { 
-      0: { cellWidth: 15 }, // Columna para la imagen
-      1: { cellWidth: 75 }, 
-      2: { halign: 'center' }, 
-      3: { halign: 'right' }, 
-      4: { halign: 'right' } 
-    },
-    didDrawCell: (data: any) => {
-      // Dibujar la imagen del producto si estamos en la primera columna del cuerpo
-      if (data.column.index === 0 && data.cell.section === 'body') {
-        const item = doc.items[data.row.index];
-        if (item.image) {
-          try {
-            const dim = 10;
-            const x = data.cell.x + (data.cell.width - dim) / 2;
-            const y = data.cell.y + (data.cell.height - dim) / 2;
-            pdf.addImage(item.image, 'PNG', x, y, dim, dim);
-          } catch (e) {
-            console.warn("Could not draw product image in PDF");
-          }
-        }
+    // Cabecera
+    pdf.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    pdf.rect(0, 0, 210, 50, 'F');
+    
+    const logoToUse = doc.logo || settings.logo;
+    if (logoToUse && logoToUse.startsWith('data:image')) {
+      try {
+        pdf.addImage(logoToUse, 'PNG', 15, 10, 30, 30);
+      } catch (e) {
+        console.warn("PDF Logo Error:", e);
       }
     }
-  });
 
-  const finalY = (pdf as any).lastAutoTable.finalY || 130;
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(18);
+    pdf.text(settings.companyName, 50, 22);
+    pdf.setFontSize(9);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text(`ID/NIT: ${settings.companyId}`, 50, 28);
+    pdf.text(settings.companyAddress, 50, 33);
 
-  // 4. Totales y Retenciones
-  const subtotal = doc.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
-  const tax = subtotal * (doc.taxRate / 100);
-  const gross = subtotal + tax;
-  const withholding = gross * ((doc.withholdingRate || 0) / 100);
-  const net = gross - withholding;
+    pdf.setFontSize(16);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(doc.type.toUpperCase(), 195, 22, { align: 'right' });
+    pdf.setFontSize(11);
+    pdf.text(`No. ${doc.number}`, 195, 28, { align: 'right' });
 
-  const totalX = 140;
-  pdf.setFontSize(10);
-  pdf.setTextColor(71, 85, 105);
-  pdf.text('Subtotal:', totalX, finalY + 15);
-  pdf.text(formatCurrency(subtotal), 195, finalY + 15, { align: 'right' });
-
-  if (tax > 0) {
-    pdf.text(`IVA (${doc.taxRate}%):`, totalX, finalY + 22);
-    pdf.text(formatCurrency(tax), 195, finalY + 22, { align: 'right' });
-  }
-
-  if (withholding > 0) {
-    pdf.setTextColor(153, 27, 27); // Rojo para retención
-    pdf.text(`Retención (${doc.withholdingRate}%):`, totalX, finalY + 29);
-    pdf.text(`-${formatCurrency(withholding)}`, 195, finalY + 29, { align: 'right' });
-  }
-
-  pdf.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  pdf.setLineWidth(0.5);
-  pdf.line(totalX, finalY + 34, 195, finalY + 34);
-
-  pdf.setFontSize(14);
-  pdf.setFont('helvetica', 'bold');
-  pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-  pdf.text('TOTAL A PAGAR:', totalX, finalY + 42);
-  pdf.text(formatCurrency(net), 195, finalY + 42, { align: 'right' });
-
-  // 5. Notas Legales y Firma
-  if (doc.notes) {
+    // Cliente e Info Comercial
     pdf.setTextColor(30, 41, 59);
     pdf.setFontSize(9);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('NOTAS Y CONDICIONES:', 15, finalY + 60);
+    pdf.text('CLIENTE / RECEPTOR:', 15, 65);
     pdf.setFont('helvetica', 'normal');
     pdf.setTextColor(71, 85, 105);
-    const splitNotes = pdf.splitTextToSize(doc.notes, 110);
-    pdf.text(splitNotes, 15, finalY + 67);
+    if (client) {
+      pdf.text([
+        client.name,
+        `NIT/CC: ${client.taxId}`,
+        client.address,
+        `${client.city}, ${client.municipality}`,
+        `Email: ${client.email}`
+      ], 15, 71);
+    }
+
+    // Tabla de Contenido
+    const tableHeaders = [['Ref', 'Descripción', 'Cant.', 'Unitario', 'Total']];
+    const tableData = doc.items.map((item, idx) => [
+      (idx + 1).toString(),
+      item.description,
+      item.quantity.toString(),
+      formatCurrency(item.unitPrice),
+      formatCurrency(item.quantity * item.unitPrice)
+    ]);
+
+    autoTable(pdf, {
+      startY: 100,
+      head: tableHeaders,
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: primaryColor, textColor: 255, fontSize: 9 },
+      styles: { fontSize: 8, cellPadding: 3 },
+      columnStyles: { 
+        2: { halign: 'center' }, 
+        3: { halign: 'right' }, 
+        4: { halign: 'right' } 
+      }
+    });
+
+    const finalY = (pdf as any).lastAutoTable.finalY + 10;
+
+    // Totales
+    const subtotal = doc.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
+    const tax = subtotal * (doc.taxRate / 100);
+    const gross = subtotal + tax;
+    const withholding = gross * ((doc.withholdingRate || 0) / 100);
+    const net = gross - withholding;
+
+    const totalX = 140;
+    pdf.setFontSize(9);
+    pdf.setTextColor(71, 85, 105);
+    pdf.text('Subtotal:', totalX, finalY);
+    pdf.text(formatCurrency(subtotal), 195, finalY, { align: 'right' });
+
+    let currentY = finalY;
+    if (tax > 0) {
+      currentY += 6;
+      pdf.text(`IVA (${doc.taxRate}%):`, totalX, currentY);
+      pdf.text(formatCurrency(tax), 195, currentY, { align: 'right' });
+    }
+
+    if (withholding > 0) {
+      currentY += 6;
+      pdf.text(`Retención (${doc.withholdingRate}%):`, totalX, currentY);
+      pdf.text(`-${formatCurrency(withholding)}`, 195, currentY, { align: 'right' });
+    }
+
+    currentY += 10;
+    pdf.setFontSize(11);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+    pdf.text('TOTAL A PAGAR:', totalX, currentY);
+    pdf.text(formatCurrency(net), 195, currentY, { align: 'right' });
+
+    // Notas
+    if (doc.notes) {
+      pdf.setTextColor(30, 41, 59);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('NOTAS Y CONDICIONES:', 15, currentY + 15);
+      pdf.setFont('helvetica', 'normal');
+      const splitNotes = pdf.splitTextToSize(doc.notes, 110);
+      pdf.text(splitNotes, 15, currentY + 20);
+    }
+
+    pdf.save(`${doc.type}_${doc.number}.pdf`);
+  } catch (err) {
+    console.error("PDF Generation Error:", err);
+    alert("Error al generar el PDF. Verifica que los datos sean correctos.");
   }
-
-  // Línea de Firma (Crucial para Cuentas de Cobro)
-  if (isCollection) {
-    pdf.setDrawColor(200, 200, 200);
-    pdf.line(130, 250, 190, 250);
-    pdf.setFontSize(8);
-    pdf.text('FIRMA DEL PRESTADOR', 160, 255, { align: 'center' });
-    pdf.text(`C.C./NIT. ${settings.companyId}`, 160, 259, { align: 'center' });
-  }
-
-  pdf.setFontSize(7);
-  pdf.setTextColor(160, 160, 160);
-  pdf.text(`Este documento fue generado electrónicamente por FacturaPro.`, 105, 285, { align: 'center' });
-
-  pdf.save(`${doc.type}_${doc.number}.pdf`);
 };

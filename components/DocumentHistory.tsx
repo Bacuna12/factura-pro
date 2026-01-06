@@ -41,14 +41,16 @@ const DocumentHistory: React.FC<DocumentHistoryProps> = ({
   };
 
   const filteredDocs = useMemo(() => {
-    return documents.filter(doc => {
-      const matchesType = filterType === 'ALL' || doc.type === filterType;
-      const matchesStatus = filterStatus === 'ALL' || doc.status === filterStatus;
-      const clientName = getClient(doc.clientId)?.name.toLowerCase() || '';
-      const matchesSearch = doc.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           clientName.includes(searchTerm.toLowerCase());
-      return matchesType && matchesStatus && matchesSearch;
-    });
+    return [...documents]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || b.number.localeCompare(a.number))
+      .filter(doc => {
+        const matchesType = filterType === 'ALL' || doc.type === filterType;
+        const matchesStatus = filterStatus === 'ALL' || doc.status === filterStatus;
+        const clientName = getClient(doc.clientId)?.name.toLowerCase() || '';
+        const matchesSearch = doc.number.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                             clientName.includes(searchTerm.toLowerCase());
+        return matchesType && matchesStatus && matchesSearch;
+      });
   }, [documents, filterType, filterStatus, searchTerm, clients]);
 
   const handleExportPDF = (doc: Document) => {
@@ -77,7 +79,7 @@ const DocumentHistory: React.FC<DocumentHistoryProps> = ({
 
       <header>
         <h2 className="text-3xl font-black text-gray-900 tracking-tight">Historial General</h2>
-        <p className="text-gray-500 font-medium">Todas las facturas, cuentas y presupuestos realizados</p>
+        <p className="text-gray-500 font-medium">Todas las facturas, cuentas y presupuestos realizados (Más recientes primero)</p>
       </header>
 
       {/* Filtros */}

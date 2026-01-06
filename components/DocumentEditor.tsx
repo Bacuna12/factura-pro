@@ -10,7 +10,7 @@ import {
   AppSettings,
   Product
 } from '../types';
-import { generateProfessionalDescription, suggestInvoiceNotes, generateDraftItems } from '../services/geminiService';
+import { suggestInvoiceNotes } from '../services/geminiService';
 import BarcodeScanner from './BarcodeScanner';
 
 interface DocumentEditorProps {
@@ -33,11 +33,11 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   const [doc, setDoc] = useState<Document>(initialData || {
     id: Math.random().toString(36).substr(2, 9),
     type,
-    number: `${type === DocumentType.INVOICE ? 'FAC' : isCollection ? 'CC' : 'PRE'}-${Math.floor(Math.random() * 10000)}`,
+    number: `${type === DocumentType.INVOICE ? 'FAC' : isCollection ? 'CC' : 'PRE'}-${Math.floor(Math.random() * 90000 + 10000)}`,
     date: new Date().toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     clientId: clients[0]?.id || '',
-    items: [{ id: '1', description: '', quantity: 1, unitPrice: 0 }],
+    items: [{ id: Math.random().toString(36).substr(2, 9), description: '', quantity: 1, unitPrice: 0 }],
     status: DocumentStatus.DRAFT,
     notes: isCollection ? `Certifico que NO soy responsable de IVA. Favor consignar a la cuenta [Tipo] número [Número] del banco [Nombre].` : '',
     taxRate: isCollection ? 0 : settings.defaultTaxRate,
@@ -45,7 +45,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     logo: settings.logo
   });
 
-  const [aiLoading, setAiLoading] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState<boolean>(false);
   const [isQuickClientOpen, setIsQuickClientOpen] = useState(false);
   const [isQuickProductOpen, setIsQuickProductOpen] = useState(false);
   
@@ -194,15 +194,18 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   const netTotal = grossTotal - withholding;
 
   const handleSuggestNotes = async () => {
-    setAiLoading('notes');
+    setAiLoading(true);
     const notes = await suggestInvoiceNotes(doc.type, netTotal, settings.currency);
     setDoc({ ...doc, notes: isCollection ? `${doc.notes}\n\n${notes}` : notes });
-    setAiLoading(null);
+    setAiLoading(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("Iniciando guardado de documento:", doc);
+    if (!doc.clientId) {
+      alert("Por favor selecciona un cliente.");
+      return;
+    }
     onSave(doc);
     if (type === DocumentType.INVOICE) navigate('/invoices');
     else if (type === DocumentType.ACCOUNT_COLLECTION) navigate('/collections');
@@ -296,6 +299,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                         )}
                         <input 
                           type="text"
+                          required
                           value={item.description}
                           onChange={(e) => updateItem(item.id, 'description', e.target.value)}
                           className="flex-1 p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none"
@@ -312,11 +316,11 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                     </div>
                     <div className="w-full md:w-24">
                       <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Cant.</label>
-                      <input type="number" value={item.quantity} onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value))} className="w-full p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none text-center" />
+                      <input type="number" step="any" min="0.01" required value={item.quantity} onChange={(e) => updateItem(item.id, 'quantity', parseFloat(e.target.value))} className="w-full p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none text-center" />
                     </div>
                     <div className="w-full md:w-32">
                       <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">P. Unitario</label>
-                      <input type="number" value={item.unitPrice} onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value))} className="w-full p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none text-right" />
+                      <input type="number" step="any" required value={item.unitPrice} onChange={(e) => updateItem(item.id, 'unitPrice', parseFloat(e.target.value))} className="w-full p-3 bg-white border border-gray-100 rounded-xl font-bold text-sm outline-none text-right" />
                     </div>
                     <button type="button" onClick={() => handleRemoveItem(item.id)} className="p-3 text-rose-500 hover:bg-rose-50 rounded-xl transition-colors">🗑️</button>
                   </div>
@@ -327,7 +331,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
             <div className="bg-white p-8 rounded-[32px] shadow-sm border border-gray-100 space-y-4">
                <div className="flex justify-between items-center">
                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Observaciones y Notas Legales</p>
-                <button type="button" onClick={handleSuggestNotes} className={`text-[10px] font-black ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>🪄 Asistente IA</button>
+                <button type="button" onClick={handleSuggestNotes} className={`text-[10px] font-black ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>🪄 {aiLoading ? 'Generando...' : 'Asistente IA'}</button>
               </div>
               <textarea 
                 value={doc.notes}
@@ -367,7 +371,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                 <div className="pt-6 border-t border-white/10 space-y-1">
                   <div className="flex justify-between items-baseline">
                     <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Total a Pagar</span>
-                    <span className="text-3xl font-black">{formatCurrency(netTotal)}</span>
+                    <span className="text-xl font-black">{formatCurrency(netTotal)}</span>
                   </div>
                 </div>
               </div>
@@ -380,7 +384,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
         </div>
       </form>
 
-      {/* MODALES FUERA DEL FORMULARIO PARA EVITAR INTERFERENCIAS */}
+      {/* MODALES - Movidos fuera del form principal */}
       {isProductSelectorOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[150] flex items-center justify-center p-4">
           <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden animate-slideUp">
@@ -433,7 +437,6 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                           <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${stock <= 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
                             STOCK: {stock}
                           </span>
-                          {p.barcode && <span className="text-[9px] text-slate-400 font-bold tracking-tight">🏷️ {p.barcode}</span>}
                         </div>
                       </div>
                     </div>
@@ -463,7 +466,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                   <input required value={quickClient.name} onChange={e => setQuickClient({...quickClient, name: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black uppercase text-gray-400">Identificación (NIT/CC)</label>
+                  <label className="text-[10px] font-black uppercase text-gray-400">NIT/CC</label>
                   <input required value={quickClient.taxId} onChange={e => setQuickClient({...quickClient, taxId: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
                 </div>
                 <div>
@@ -486,7 +489,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
             </div>
             <form onSubmit={handleQuickProductSave} className="p-8 space-y-4">
               <div>
-                <label className="text-[10px] font-black uppercase text-gray-400">Nombre del Producto/Servicio</label>
+                <label className="text-[10px] font-black uppercase text-gray-400">Nombre del Producto</label>
                 <input required value={quickProduct.description} onChange={e => setQuickProduct({...quickProduct, description: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -502,19 +505,8 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
               <div>
                 <label className="text-[10px] font-black uppercase text-gray-400">Código de Barras</label>
                 <div className="flex gap-2">
-                  <input 
-                    value={quickProduct.barcode || ''} 
-                    onChange={e => setQuickProduct({...quickProduct, barcode: e.target.value})} 
-                    className="flex-1 p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" 
-                    placeholder="Escribe o escanea..." 
-                  />
-                  <button 
-                    type="button" 
-                    onClick={() => startScanning('QUICK_PRODUCT')}
-                    className={`w-14 rounded-2xl flex items-center justify-center text-xl transition-colors ${isCollection ? 'bg-violet-100 text-violet-600 hover:bg-violet-200' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}
-                  >
-                    📷
-                  </button>
+                  <input value={quickProduct.barcode || ''} onChange={e => setQuickProduct({...quickProduct, barcode: e.target.value})} className="flex-1 p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
+                  <button type="button" onClick={() => startScanning('QUICK_PRODUCT')} className={`w-14 rounded-2xl flex items-center justify-center text-xl transition-colors ${isCollection ? 'bg-violet-100 text-violet-600 hover:bg-violet-200' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>📷</button>
                 </div>
               </div>
               <button type="submit" className={`w-full py-5 text-white rounded-[24px] font-black shadow-xl mt-4 ${isCollection ? 'bg-violet-600 shadow-violet-100' : 'bg-indigo-600 shadow-indigo-100'}`}>Crear y Añadir</button>
