@@ -22,7 +22,7 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
   // Estados para Registro de Pago
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [activeDocForPayment, setActiveDocForPayment] = useState<Document | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentAmount, setPaymentAmount] = useState<string>('0');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
 
   const calculateTotal = (doc: Document) => {
@@ -59,26 +59,26 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
     exportToPDF(doc, client, settings);
   };
 
-  const handleOpenPayment = (e: React.MouseEvent, doc: Document) => {
-    e.stopPropagation();
+  const handleOpenPayment = (doc: Document) => {
     const total = calculateTotal(doc);
     const paid = calculatePaidAmount(doc);
-    const remaining = total - paid;
+    const remaining = Math.max(0, total - paid);
     
     setActiveDocForPayment(doc);
-    setPaymentAmount(remaining > 0 ? remaining : 0);
+    setPaymentAmount(remaining.toString());
     setPaymentMethod(doc.paymentMethod || 'Efectivo');
     setIsPaymentModalOpen(true);
   };
 
-  const handleRegisterPayment = () => {
-    const amount = Number(paymentAmount);
-    if (!activeDocForPayment || isNaN(amount) || amount < 0) return;
+  const handleRegisterPayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amountNum = parseFloat(paymentAmount);
+    if (!activeDocForPayment || isNaN(amountNum) || amountNum <= 0) return;
 
     const newPayment: Payment = {
       id: Math.random().toString(36).substr(2, 9),
       date: new Date().toISOString().split('T')[0],
-      amount: amount,
+      amount: amountNum,
       method: paymentMethod
     };
 
@@ -87,11 +87,13 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
     const docTotal = calculateTotal(activeDocForPayment);
 
     let newStatus = activeDocForPayment.status;
-    if (totalPaid >= docTotal - 1) newStatus = DocumentStatus.PAID;
+    if (totalPaid >= docTotal - 0.5) newStatus = DocumentStatus.PAID;
     else if (totalPaid > 0) newStatus = DocumentStatus.PARTIAL;
 
-    onUpdateDoc({ ...activeDocForPayment, payments: updatedPayments, status: newStatus });
+    onUpdateDoc({ ...activeDocForPayment, payments: updatedPayments, status: newStatus, paymentMethod });
     setIsPaymentModalOpen(false);
+    setActiveDocForPayment(null);
+    alert("Pago registrado correctamente");
   };
 
   const getRouteBase = (docType: DocumentType) => {
@@ -105,7 +107,7 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
       <ConfirmModal 
         isOpen={!!docToDelete}
         title="Eliminar Documento"
-        message="¿Estás seguro de que deseas eliminar este registro? Si es una factura, el stock de los productos se reintegrará automáticamente."
+        message="¿Estás seguro de que deseas eliminar este registro?"
         onConfirm={() => {
           if (docToDelete) onDeleteDoc(docToDelete);
           setDocToDelete(null);
@@ -114,35 +116,45 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
       />
 
       {isPaymentModalOpen && activeDocForPayment && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden animate-slideUp">
+        <div 
+          className="fixed inset-0 bg-black/90 backdrop-blur-xl z-[99999] flex items-center justify-center p-4"
+          onClick={() => setIsPaymentModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden animate-slideUp shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
             <div className="bg-emerald-600 p-8 text-white">
               <h3 className="text-2xl font-black">Cobrar Documento</h3>
               <p className="text-emerald-100 text-xs">#{activeDocForPayment.number}</p>
             </div>
-            <div className="p-8 space-y-6">
+            <form onSubmit={handleRegisterPayment} className="p-8 space-y-6">
               <div className="bg-emerald-50 p-4 rounded-2xl">
                  <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">Saldo</p>
                  <p className="text-2xl font-black text-emerald-900">{formatCurrency(calculateTotal(activeDocForPayment) - calculatePaidAmount(activeDocForPayment))}</p>
               </div>
               <input 
                 type="number" 
+                autoFocus
+                required
+                step="any"
                 value={paymentAmount} 
-                onChange={e => setPaymentAmount(Number(e.target.value))}
-                className="w-full p-4 bg-gray-50 rounded-2xl border-none font-black text-2xl text-emerald-600 outline-none"
+                onChange={e => setPaymentAmount(e.target.value)}
+                className="w-full p-4 bg-gray-50 rounded-2xl border-2 border-transparent focus:border-emerald-500 font-black text-2xl text-emerald-600 outline-none"
               />
               <select 
                 value={paymentMethod} 
                 onChange={e => setPaymentMethod(e.target.value)}
-                className="w-full p-4 bg-gray-50 rounded-2xl font-bold"
+                className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none"
               >
                 <option value="Efectivo">Efectivo</option>
                 <option value="Transferencia">Transferencia</option>
                 <option value="Nequi">Nequi</option>
+                <option value="Daviplata">Daviplata</option>
               </select>
-              <button onClick={handleRegisterPayment} className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black shadow-lg">Confirmar Cobro</button>
-              <button onClick={() => setIsPaymentModalOpen(false)} className="w-full py-2 text-gray-400 font-bold">Cancelar</button>
-            </div>
+              <button type="submit" className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black shadow-lg">Confirmar Pago</button>
+              <button type="button" onClick={() => setIsPaymentModalOpen(false)} className="w-full py-2 text-gray-400 font-bold">Cancelar</button>
+            </form>
           </div>
         </div>
       )}
@@ -151,11 +163,6 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
         <div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">Panel de Control</h2>
           <p className="text-gray-500 font-medium">Balance general de tu negocio</p>
-        </div>
-        <div className="hidden sm:block">
-          <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold uppercase tracking-widest">
-            {settings.companyName}
-          </span>
         </div>
       </header>
 
@@ -183,7 +190,12 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {documents.slice(0, 8).map(doc => (
+                {documents.slice(0, 8).map(doc => {
+                  const total = calculateTotal(doc);
+                  const paid = calculatePaidAmount(doc);
+                  const isPaid = (total - paid) <= 0.5;
+                  
+                  return (
                   <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors group">
                     <td className="px-6 py-4 cursor-pointer" onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)}>
                       <p className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">#{doc.number}</p>
@@ -199,57 +211,21 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
                         {doc.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 font-black text-gray-900">{formatCurrency(calculateTotal(doc))}</td>
+                    <td className="px-6 py-4 font-black text-gray-900">{formatCurrency(total)}</td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end space-x-1">
-                         {(doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
-                            <button onClick={(e) => handleOpenPayment(e, doc)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Cobrar">💸</button>
+                         {!isPaid && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
+                            <button onClick={() => handleOpenPayment(doc)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg">💸</button>
                          )}
-                         <button onClick={(e) => { e.stopPropagation(); handleExportPDF(doc); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg">📥</button>
-                         <button onClick={(e) => { e.stopPropagation(); navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button>
-                         <button onClick={(e) => { e.stopPropagation(); setDocToDelete(doc.id); }} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg">🗑️</button>
+                         <button onClick={() => handleExportPDF(doc)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg">📥</button>
+                         <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button>
+                         <button onClick={() => setDocToDelete(doc.id)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg">🗑️</button>
                       </div>
                     </td>
                   </tr>
-                ))}
-                {documents.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="py-20 text-center">
-                      <div className="text-4xl mb-4">📉</div>
-                      <p className="text-gray-400 italic font-medium">Aún no hay actividad registrada</p>
-                    </td>
-                  </tr>
-                )}
+                )})}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
-            <div className="relative z-10">
-              <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Margen de Ganancia</h4>
-              <p className="text-3xl font-black mb-4">{totalInvoiced > 0 ? Math.round((netProfit / totalInvoiced) * 100) : 0}%</p>
-              <div className="flex items-center space-x-2 text-blue-400 text-sm font-bold"><span>⚡</span><span>Eficiencia operativa</span></div>
-            </div>
-            <div className="absolute -right-4 -bottom-4 opacity-10 text-8xl">💎</div>
-          </div>
-          
-          <div className="bg-white rounded-3xl p-6 border border-gray-100 shadow-sm">
-            <h4 className="text-gray-800 font-bold mb-4">Resumen de Gastos</h4>
-            <div className="space-y-4">
-              {expenses.slice(0, 4).map(e => (
-                <div key={e.id} className="flex justify-between items-center">
-                  <div>
-                    <p className="text-xs font-bold text-gray-800 truncate max-w-[120px]">{e.description}</p>
-                    <p className="text-[10px] text-gray-400">{e.category}</p>
-                  </div>
-                  <p className="text-sm font-black text-rose-600">-{formatCurrency(e.amount)}</p>
-                </div>
-              ))}
-              {expenses.length === 0 && <p className="text-xs text-gray-400 italic">No hay gastos recientes</p>}
-              {expenses.length > 4 && <button onClick={() => navigate('/expenses')} className="text-xs text-blue-600 font-bold hover:underline w-full text-center pt-2">Ver todos los gastos</button>}
-            </div>
           </div>
         </div>
       </div>
