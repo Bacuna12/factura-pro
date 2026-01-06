@@ -5,6 +5,7 @@ import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import DocumentList from './components/DocumentList';
 import DocumentEditor from './components/DocumentEditor';
+import DocumentHistory from './components/DocumentHistory';
 import ClientManager from './components/ClientManager';
 import ProductManager from './components/ProductManager';
 import ExpenseManager from './components/ExpenseManager';
@@ -41,7 +42,10 @@ const INITIAL_SETTINGS: AppSettings = {
 
 const App: React.FC = () => {
   const [user] = useState<User>(DEFAULT_USER);
-  const [documents, setDocuments] = useState<Document[]>(() => JSON.parse(localStorage.getItem('facturapro_docs') || '[]'));
+  const [documents, setDocuments] = useState<Document[]>(() => {
+    const saved = localStorage.getItem('facturapro_docs');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [expenses, setExpenses] = useState<Expense[]>(() => JSON.parse(localStorage.getItem('facturapro_expenses') || '[]'));
   const [clients, setClients] = useState<Client[]>(() => {
     const saved = localStorage.getItem('facturapro_clients');
@@ -53,37 +57,42 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : INITIAL_SETTINGS;
   });
 
-  useEffect(() => { database.save('facturapro_docs', documents); }, [documents]);
-  useEffect(() => { database.save('facturapro_expenses', expenses); }, [expenses]);
-  useEffect(() => { database.save('facturapro_clients', clients); }, [clients]);
-  useEffect(() => { database.save('facturapro_products', products); }, [products]);
-  useEffect(() => { database.save('facturapro_settings', settings); }, [settings]);
+  // Persistencia explícita
+  useEffect(() => { localStorage.setItem('facturapro_docs', JSON.stringify(documents)); }, [documents]);
+  useEffect(() => { localStorage.setItem('facturapro_expenses', JSON.stringify(expenses)); }, [expenses]);
+  useEffect(() => { localStorage.setItem('facturapro_clients', JSON.stringify(clients)); }, [clients]);
+  useEffect(() => { localStorage.setItem('facturapro_products', JSON.stringify(products)); }, [products]);
+  useEffect(() => { localStorage.setItem('facturapro_settings', JSON.stringify(settings)); }, [settings]);
 
   const handleImportData = (data: BackupData) => database.restoreDatabase(data);
 
   const handleSaveDocument = (doc: Document) => {
-    // Verificar si es un documento nuevo para deducir stock
-    setDocuments(prevDocs => {
-      const isNew = !prevDocs.find(d => d.id === doc.id);
-      
-      if (isNew && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION)) {
-        setProducts(currentProducts => {
-          return currentProducts.map(p => {
-            const matchedItem = doc.items.find(item => 
-              item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
-              (p.barcode && item.description === p.barcode)
-            );
-            if (matchedItem) {
-              return { ...p, stock: (p.stock || 0) - matchedItem.quantity };
-            }
-            return p;
-          });
+    const isNew = !documents.find(d => d.id === doc.id);
+    
+    // 1. Deducir Stock si es nuevo e invoice/cuenta cobro
+    if (isNew && (doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION)) {
+      setProducts(prevProducts => {
+        return prevProducts.map(p => {
+          const matchedItem = doc.items.find(item => 
+            item.description.toLowerCase().trim() === p.description.toLowerCase().trim() || 
+            (p.barcode && item.description === p.barcode)
+          );
+          if (matchedItem) {
+            return { ...p, stock: (p.stock || 0) - matchedItem.quantity };
+          }
+          return p;
         });
-      }
+      });
+    }
 
+    // 2. Guardar Documento
+    setDocuments(prevDocs => {
       const exists = prevDocs.find(d => d.id === doc.id);
-      if (exists) return prevDocs.map(d => d.id === doc.id ? doc : d);
-      return [doc, ...prevDocs];
+      if (exists) {
+        return prevDocs.map(d => d.id === doc.id ? doc : d);
+      } else {
+        return [doc, ...prevDocs];
+      }
     });
   };
 
@@ -99,6 +108,8 @@ const App: React.FC = () => {
         <Routes>
           <Route path="/" element={<Dashboard documents={documents} expenses={expenses} clientsCount={clients.length} settings={settings} />} />
           
+          <Route path="/history" element={<DocumentHistory documents={documents} clients={clients} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} />} />
+
           <Route path="/invoices" element={<DocumentList type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onDelete={handleDeleteDocument} onUpdateDocument={handleSaveDocument} onUpdateProducts={handleUpdateProducts} />} />
           <Route path="/invoices/new" element={<DocumentEditor key="new-invoice" type={DocumentType.INVOICE} clients={clients} products={products} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} settings={settings} />} />
           <Route path="/invoices/edit/:id" element={<EditDocumentWrapper type={DocumentType.INVOICE} documents={documents} clients={clients} products={products} settings={settings} onSave={handleSaveDocument} onUpdateClients={handleUpdateClients} onUpdateProducts={handleUpdateProducts} />} />

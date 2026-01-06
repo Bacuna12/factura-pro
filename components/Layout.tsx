@@ -11,6 +11,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, user }) => {
   const navItems = [
     { path: '/', label: 'Panel', icon: '📊' },
+    { path: '/history', label: 'Historial', icon: '📜' },
     { path: '/invoices', label: 'Facturas', icon: '🧾' },
     { path: '/collections', label: 'Cuentas Cobro', icon: '📝' },
     { path: '/quotes', label: 'Presupuestos', icon: '📄' },
@@ -35,7 +36,7 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
           <p className="text-[10px] text-slate-500 font-black uppercase tracking-[0.2em] ml-1 mt-4">Business Engine</p>
         </div>
         
-        <nav className="flex-1 space-y-1.5">
+        <nav className="flex-1 space-y-1.5 overflow-y-auto scrollbar-hide">
           {navItems.map((item) => (
             <NavLink
               key={item.path}
@@ -81,13 +82,13 @@ const Layout: React.FC<LayoutProps> = ({ children, user }) => {
       </main>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-6 left-5 right-5 bg-slate-900/95 backdrop-blur-xl text-white rounded-[32px] flex justify-around items-center p-3 no-print shadow-2xl z-[100] border border-white/10">
+      <nav className="md:hidden fixed bottom-6 left-5 right-5 bg-slate-900/95 backdrop-blur-xl text-white rounded-[32px] flex justify-around items-center p-3 no-print shadow-2xl z-[100] border border-white/10 overflow-x-auto scrollbar-hide">
         {navItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center w-12 h-12 rounded-2xl transition-all ${
+              `flex flex-col items-center justify-center flex-shrink-0 w-12 h-12 rounded-2xl transition-all ${
                 isActive ? 'bg-blue-600 text-white scale-110' : 'text-slate-500'
               }`
             }
