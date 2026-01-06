@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Document, DocumentType, DocumentStatus, AppSettings, Expense, Client } from '../types';
+import { Document, DocumentType, DocumentStatus, AppSettings, Expense, Client, Payment } from '../types';
 import { exportToPDF } from '../services/pdfService';
 import ConfirmModal from './ConfirmModal';
 
@@ -11,12 +11,19 @@ interface DashboardProps {
   clientsCount: number;
   settings: AppSettings;
   onDeleteDoc: (id: string) => void;
+  onUpdateDoc: (doc: Document) => void;
   clients: Client[];
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount, settings, onDeleteDoc, clients }) => {
+const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount, settings, onDeleteDoc, onUpdateDoc, clients }) => {
   const navigate = useNavigate();
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
+  
+  // Estados para Registro de Pago
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [activeDocForPayment, setActiveDocForPayment] = useState<Document | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState('Efectivo');
 
   const calculateTotal = (doc: Document) => {
     const subtotal = doc.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
@@ -52,6 +59,41 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
     exportToPDF(doc, client, settings);
   };
 
+  const handleOpenPayment = (e: React.MouseEvent, doc: Document) => {
+    e.stopPropagation();
+    const total = calculateTotal(doc);
+    const paid = calculatePaidAmount(doc);
+    const remaining = total - paid;
+    
+    setActiveDocForPayment(doc);
+    setPaymentAmount(remaining > 0 ? remaining : 0);
+    setPaymentMethod(doc.paymentMethod || 'Efectivo');
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleRegisterPayment = () => {
+    const amount = Number(paymentAmount);
+    if (!activeDocForPayment || isNaN(amount) || amount < 0) return;
+
+    const newPayment: Payment = {
+      id: Math.random().toString(36).substr(2, 9),
+      date: new Date().toISOString().split('T')[0],
+      amount: amount,
+      method: paymentMethod
+    };
+
+    const updatedPayments = [...(activeDocForPayment.payments || []), newPayment];
+    const totalPaid = updatedPayments.reduce((acc, p) => acc + p.amount, 0);
+    const docTotal = calculateTotal(activeDocForPayment);
+
+    let newStatus = activeDocForPayment.status;
+    if (totalPaid >= docTotal - 1) newStatus = DocumentStatus.PAID;
+    else if (totalPaid > 0) newStatus = DocumentStatus.PARTIAL;
+
+    onUpdateDoc({ ...activeDocForPayment, payments: updatedPayments, status: newStatus });
+    setIsPaymentModalOpen(false);
+  };
+
   const getRouteBase = (docType: DocumentType) => {
     if (docType === DocumentType.INVOICE) return '/invoices';
     if (docType === DocumentType.ACCOUNT_COLLECTION) return '/collections';
@@ -71,6 +113,40 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
         onCancel={() => setDocToDelete(null)}
       />
 
+      {isPaymentModalOpen && activeDocForPayment && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden animate-slideUp">
+            <div className="bg-emerald-600 p-8 text-white">
+              <h3 className="text-2xl font-black">Cobrar Documento</h3>
+              <p className="text-emerald-100 text-xs">#{activeDocForPayment.number}</p>
+            </div>
+            <div className="p-8 space-y-6">
+              <div className="bg-emerald-50 p-4 rounded-2xl">
+                 <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">Saldo</p>
+                 <p className="text-2xl font-black text-emerald-900">{formatCurrency(calculateTotal(activeDocForPayment) - calculatePaidAmount(activeDocForPayment))}</p>
+              </div>
+              <input 
+                type="number" 
+                value={paymentAmount} 
+                onChange={e => setPaymentAmount(Number(e.target.value))}
+                className="w-full p-4 bg-gray-50 rounded-2xl border-none font-black text-2xl text-emerald-600 outline-none"
+              />
+              <select 
+                value={paymentMethod} 
+                onChange={e => setPaymentMethod(e.target.value)}
+                className="w-full p-4 bg-gray-50 rounded-2xl font-bold"
+              >
+                <option value="Efectivo">Efectivo</option>
+                <option value="Transferencia">Transferencia</option>
+                <option value="Nequi">Nequi</option>
+              </select>
+              <button onClick={handleRegisterPayment} className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black shadow-lg">Confirmar Cobro</button>
+              <button onClick={() => setIsPaymentModalOpen(false)} className="w-full py-2 text-gray-400 font-bold">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="flex justify-between items-end">
         <div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">Panel de Control</h2>
@@ -84,46 +160,17 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
       </header>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          title="Ingresos Reales" 
-          value={formatCurrency(totalInvoiced)} 
-          icon="💰" 
-          color="bg-emerald-500"
-          trend="Pagos recibidos"
-        />
-        <StatCard 
-          title="Gastos Totales" 
-          value={formatCurrency(totalExpenses)} 
-          icon="💸" 
-          color="bg-rose-500"
-          trend="Egresos registrados"
-        />
-        <StatCard 
-          title="Utilidad Neta" 
-          value={formatCurrency(netProfit)} 
-          icon="📈" 
-          color={netProfit >= 0 ? "bg-blue-500" : "bg-orange-500"}
-          trend="Beneficio real"
-        />
-        <StatCard 
-          title="Por Cobrar" 
-          value={formatCurrency(pendingAmount)} 
-          icon="⏳" 
-          color="bg-amber-500"
-          trend="Cartera pendiente"
-        />
+        <StatCard title="Ingresos Reales" value={formatCurrency(totalInvoiced)} icon="💰" color="bg-emerald-500" trend="Pagos recibidos" />
+        <StatCard title="Gastos Totales" value={formatCurrency(totalExpenses)} icon="💸" color="bg-rose-500" trend="Egresos registrados" />
+        <StatCard title="Utilidad Neta" value={formatCurrency(netProfit)} icon="📈" color={netProfit >= 0 ? "bg-blue-500" : "bg-orange-500"} trend="Beneficio real" />
+        <StatCard title="Por Cobrar" value={formatCurrency(pendingAmount)} icon="⏳" color="bg-amber-500" trend="Cartera pendiente" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="p-6 border-b border-gray-50 flex justify-between items-center">
             <h3 className="text-lg font-bold text-gray-800">Actividad Reciente</h3>
-            <button 
-              onClick={() => navigate('/invoices')}
-              className="text-blue-600 text-sm font-bold hover:underline"
-            >
-              Ver todo
-            </button>
+            <button onClick={() => navigate('/invoices')} className="text-blue-600 text-sm font-bold hover:underline">Ver todo</button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left">
@@ -138,28 +185,26 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
               <tbody className="divide-y divide-gray-50">
                 {documents.slice(0, 8).map(doc => (
                   <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors group">
-                    <td className="px-6 py-4" onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)}>
+                    <td className="px-6 py-4 cursor-pointer" onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)}>
                       <p className="font-bold text-gray-800 group-hover:text-blue-600 transition-colors">#{doc.number}</p>
                       <p className="text-[9px] text-gray-400 font-black uppercase tracking-widest">{doc.type}</p>
                     </td>
                     <td className="px-6 py-4">
                       <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase ${
                         doc.status === DocumentStatus.PAID || doc.status === DocumentStatus.ACCEPTED 
-                          ? 'bg-emerald-100 text-emerald-700' 
-                          : doc.status === DocumentStatus.REJECTED 
-                          ? 'bg-rose-100 text-rose-700'
-                          : doc.status === DocumentStatus.PARTIAL
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-amber-100 text-amber-700'
+                          ? 'bg-emerald-100 text-emerald-700' : doc.status === DocumentStatus.REJECTED 
+                          ? 'bg-rose-100 text-rose-700' : doc.status === DocumentStatus.PARTIAL
+                          ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
                       }`}>
                         {doc.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 font-black text-gray-900">
-                      {formatCurrency(calculateTotal(doc))}
-                    </td>
+                    <td className="px-6 py-4 font-black text-gray-900">{formatCurrency(calculateTotal(doc))}</td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex justify-end space-x-1">
+                         {(doc.type === DocumentType.INVOICE || doc.type === DocumentType.ACCOUNT_COLLECTION) && (
+                            <button onClick={(e) => handleOpenPayment(e, doc)} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" title="Cobrar">💸</button>
+                         )}
                          <button onClick={(e) => { e.stopPropagation(); handleExportPDF(doc); }} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg">📥</button>
                          <button onClick={(e) => { e.stopPropagation(); navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">✏️</button>
                          <button onClick={(e) => { e.stopPropagation(); setDocToDelete(doc.id); }} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg">🗑️</button>
@@ -184,13 +229,8 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
           <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
             <div className="relative z-10">
               <h4 className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Margen de Ganancia</h4>
-              <p className="text-3xl font-black mb-4">
-                {totalInvoiced > 0 ? Math.round((netProfit / totalInvoiced) * 100) : 0}%
-              </p>
-              <div className="flex items-center space-x-2 text-blue-400 text-sm font-bold">
-                <span>⚡</span>
-                <span>Eficiencia operativa</span>
-              </div>
+              <p className="text-3xl font-black mb-4">{totalInvoiced > 0 ? Math.round((netProfit / totalInvoiced) * 100) : 0}%</p>
+              <div className="flex items-center space-x-2 text-blue-400 text-sm font-bold"><span>⚡</span><span>Eficiencia operativa</span></div>
             </div>
             <div className="absolute -right-4 -bottom-4 opacity-10 text-8xl">💎</div>
           </div>
@@ -208,9 +248,7 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
                 </div>
               ))}
               {expenses.length === 0 && <p className="text-xs text-gray-400 italic">No hay gastos recientes</p>}
-              {expenses.length > 4 && (
-                <button onClick={() => navigate('/expenses')} className="text-xs text-blue-600 font-bold hover:underline w-full text-center pt-2">Ver todos los gastos</button>
-              )}
+              {expenses.length > 4 && <button onClick={() => navigate('/expenses')} className="text-xs text-blue-600 font-bold hover:underline w-full text-center pt-2">Ver todos los gastos</button>}
             </div>
           </div>
         </div>
@@ -222,9 +260,7 @@ const Dashboard: React.FC<DashboardProps> = ({ documents, expenses, clientsCount
 const StatCard: React.FC<{ title: string; value: string; icon: string; color: string; trend: string }> = ({ title, value, icon, color, trend }) => (
   <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 hover:shadow-md transition-all group">
     <div className="flex justify-between items-start mb-4">
-      <div className={`w-12 h-12 rounded-2xl ${color} text-white flex items-center justify-center text-xl shadow-lg shadow-gray-200 group-hover:scale-110 transition-transform`}>
-        {icon}
-      </div>
+      <div className={`w-12 h-12 rounded-2xl ${color} text-white flex items-center justify-center text-xl shadow-lg shadow-gray-200 group-hover:scale-110 transition-transform`}>{icon}</div>
     </div>
     <p className="text-xs text-gray-400 font-black uppercase tracking-widest mb-1">{title}</p>
     <p className="text-2xl font-black text-gray-900 mb-2 truncate">{value}</p>

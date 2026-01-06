@@ -79,7 +79,9 @@ const DocumentList: React.FC<DocumentListProps> = ({
     exportToPDF(doc, client, settings);
   };
 
-  const handleOpenPayment = (doc: Document) => {
+  const handleOpenPayment = (e: React.MouseEvent, doc: Document) => {
+    e.preventDefault();
+    e.stopPropagation();
     const total = calculateTotal(doc);
     const paid = calculatePaid(doc);
     const remaining = total - paid;
@@ -92,12 +94,16 @@ const DocumentList: React.FC<DocumentListProps> = ({
   };
 
   const handleRegisterPayment = () => {
-    if (!activeDocForPayment || paymentAmount <= 0) return;
+    const amount = Number(paymentAmount);
+    if (!activeDocForPayment || isNaN(amount) || amount < 0) {
+      alert("Por favor ingresa un monto válido.");
+      return;
+    }
 
     const newPayment: Payment = {
       id: Math.random().toString(36).substr(2, 9),
       date: new Date().toISOString().split('T')[0],
-      amount: paymentAmount,
+      amount: amount,
       method: paymentMethod,
       note: paymentNote
     };
@@ -107,17 +113,17 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const docTotal = calculateTotal(activeDocForPayment);
 
     let newStatus = activeDocForPayment.status;
-    if (totalPaid >= docTotal - 1) { // -1 para evitar errores de redondeo
+    if (totalPaid >= docTotal - 1) { 
       newStatus = DocumentStatus.PAID;
     } else if (totalPaid > 0) {
       newStatus = DocumentStatus.PARTIAL;
     }
 
-    const updatedDoc = {
+    const updatedDoc: Document = {
       ...activeDocForPayment,
       payments: updatedPayments,
       status: newStatus,
-      paymentMethod: paymentMethod // Actualizamos el método preferido también
+      paymentMethod: paymentMethod
     };
 
     onUpdateDocument(updatedDoc);
@@ -158,7 +164,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
         onCancel={() => setDocToDelete(null)}
       />
 
-      {/* Modal de Registro de Pago */}
+      {/* Modal de Registro de Pago (Reforzado) */}
       {isPaymentModalOpen && activeDocForPayment && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
           <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden animate-slideUp shadow-2xl">
@@ -179,8 +185,9 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   type="number" 
                   autoFocus
                   value={paymentAmount} 
-                  onChange={e => setPaymentAmount(parseFloat(e.target.value))}
+                  onChange={e => setPaymentAmount(Number(e.target.value))}
                   className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-black text-2xl text-emerald-600 focus:ring-2 focus:ring-emerald-500 transition-all"
+                  placeholder="0"
                 />
               </div>
 
@@ -198,6 +205,20 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   <option value="Tarjeta">Tarjeta Débito/Crédito</option>
                 </select>
               </div>
+
+              {activeDocForPayment.payments && activeDocForPayment.payments.length > 0 && (
+                <div className="pt-2">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Historial de Abonos</p>
+                  <div className="max-h-24 overflow-y-auto space-y-1">
+                    {activeDocForPayment.payments.map((p, i) => (
+                      <div key={i} className="flex justify-between text-[10px] font-bold text-gray-500 bg-gray-50 p-2 rounded-lg">
+                        <span>{p.date} - {p.method}</span>
+                        <span className="text-emerald-600">{formatCurrency(p.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-col gap-2 pt-2">
                 <button 
@@ -276,7 +297,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   {balance > 0 && <p className="text-[9px] font-black text-orange-600 uppercase">Saldo: {formatCurrency(balance)}</p>}
                 </div>
                 <div className="flex space-x-2">
-                  <button onClick={() => handleOpenPayment(doc)} className="w-10 h-10 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors shadow-sm" title="Registrar Pago">💸</button>
+                  <button onClick={(e) => handleOpenPayment(e, doc)} className="w-10 h-10 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors shadow-sm" title="Registrar Pago">💸</button>
                   <button onClick={() => handleExportPDF(doc)} className="w-10 h-10 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm">📥</button>
                   <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="w-10 h-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors shadow-sm">✏️</button>
                   <button onClick={() => setDocToDelete(doc.id)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors shadow-sm">🗑️</button>
@@ -321,7 +342,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end space-x-2">
-                      <button onClick={() => handleOpenPayment(doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Cobrar / Registrar Pago">💸</button>
+                      <button onClick={(e) => handleOpenPayment(e, doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Cobrar / Registrar Pago">💸</button>
                       <button onClick={() => handleExportPDF(doc)} className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all" title="PDF">📥</button>
                       <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar">✏️</button>
                       <button onClick={() => setDocToDelete(doc.id)} className="p-2.5 text-rose-600 hover:bg-rose-100 bg-rose-50/50 rounded-xl transition-all" title="Eliminar">🗑️</button>
