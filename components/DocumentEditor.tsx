@@ -28,7 +28,8 @@ interface DocumentEditorProps {
 }
 
 const DocumentEditor: React.FC<DocumentEditorProps> = ({ 
-  type, clients, products, onSave, onUpdateClients, onUpdateProducts, settings, initialData 
+  // Added missing onDelete to destructuring to fix line 235 and 236 errors.
+  type, clients, products, onSave, onUpdateClients, onUpdateProducts, settings, initialData, onDelete
 }) => {
   const navigate = useNavigate();
   const isCollection = type === DocumentType.ACCOUNT_COLLECTION;
@@ -232,8 +233,14 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
   };
 
   const handleDelete = () => {
-    alert("Para eliminar esta factura, por favor utiliza el botón de papelera en el historial de facturas.");
-    navigate(-1);
+    // Fixed reference to onDelete here.
+    if (initialData && onDelete) {
+        onDelete(initialData.id);
+        navigate(-1);
+    } else {
+        alert("Para eliminar esta factura, por favor utiliza el botón de papelera en el historial de facturas.");
+        navigate(-1);
+    }
   };
 
   return (
@@ -243,7 +250,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
       <ConfirmModal 
         isOpen={isConfirmDeleteOpen}
         title="Eliminar Documento"
-        message="¿Estás seguro de que deseas borrar este registro definitivamente?"
+        message="¿Estás seguro de que deseas borrar este registro definitivamente? El stock será devuelto al inventario."
         onConfirm={handleDelete}
         onCancel={() => setIsConfirmDeleteOpen(false)}
       />
@@ -295,17 +302,17 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
                   <input type="date" value={doc.date} onChange={(e) => setDoc({ ...doc, date: e.target.value })} className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none" required />
                 </div>
                 <div>
-                  <label className="block text-xs font-black text-gray-500 uppercase mb-2">Método de Pago</label>
+                  <label className="block text-xs font-black text-gray-500 uppercase mb-2">Método de Pago Preferido</label>
                   <select 
                     value={doc.paymentMethod}
                     onChange={(e) => setDoc({ ...doc, paymentMethod: e.target.value })}
-                    className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none"
+                    className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="Efectivo">Efectivo</option>
                     <option value="Transferencia">Transferencia Bancaria</option>
-                    <option value="Tarjeta">Tarjeta de Crédito/Débito</option>
                     <option value="Nequi">Nequi</option>
                     <option value="Daviplata">Daviplata</option>
+                    <option value="Tarjeta">Tarjeta Débito/Crédito</option>
                   </select>
                 </div>
               </div>
@@ -441,7 +448,137 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
           </div>
         </div>
       </form>
-      {/* ... (resto de modales omitido para brevedad ya que no cambia) */}
+
+      {/* MODALES (SE MANTIENEN IGUAL) */}
+      {isProductSelectorOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[150] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-md overflow-hidden animate-slideUp">
+            <div className={`p-6 border-b border-gray-50 flex justify-between items-center text-white ${isCollection ? 'bg-violet-600' : 'bg-indigo-600'}`}>
+              <h3 className="font-black text-xl">Mi Catálogo</h3>
+              <button onClick={() => setIsProductSelectorOpen(false)} className="text-2xl">✕</button>
+            </div>
+            <div className="p-4 bg-gray-50 border-b border-gray-100">
+               <button 
+                type="button" 
+                onClick={() => { setIsQuickProductOpen(true); }}
+                className={`w-full p-4 bg-white border border-dashed text-sm font-black rounded-2xl hover:bg-gray-50 transition-all mb-4 ${
+                  isCollection ? 'border-violet-200 text-violet-600' : 'border-indigo-200 text-indigo-600'
+                }`}
+              >
+                ✨ Crear Nuevo Producto Rápido
+              </button>
+              <input 
+                type="text" 
+                placeholder="Busca por nombre o código..."
+                value={productSearchTerm}
+                onChange={(e) => setProductSearchTerm(e.target.value)}
+                className="w-full p-4 rounded-2xl border border-gray-100 outline-none font-bold text-sm"
+              />
+            </div>
+            <div className="p-4 max-h-80 overflow-y-auto space-y-2">
+              {products.filter(p => 
+                p.description.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
+                (p.barcode && p.barcode.toLowerCase().includes(productSearchTerm.toLowerCase()))
+              ).map(p => {
+                const stock = p.stock || 0;
+                return (
+                  <button 
+                    key={p.id} 
+                    type="button" 
+                    onClick={() => handleSelectProductFromCatalog(p)}
+                    className={`w-full p-4 text-left rounded-2xl border border-gray-100 transition-colors flex justify-between items-center group ${
+                      isCollection ? 'hover:bg-violet-50' : 'hover:bg-indigo-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      {p.image ? (
+                        <img src={p.image} className="w-10 h-10 rounded-lg object-cover" alt="" />
+                      ) : (
+                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-xl">📦</div>
+                      )}
+                      <div>
+                        <span className={`font-bold block transition-colors ${isCollection ? 'group-hover:text-violet-700' : 'group-hover:text-indigo-700'}`}>{p.description}</span>
+                        <div className="flex gap-2 items-center">
+                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${stock <= 0 ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                            STOCK: {stock}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`font-black ${isCollection ? 'text-violet-600' : 'text-blue-600'}`}>{formatCurrency(p.salePrice)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isQuickClientOpen && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[40px] w-full max-w-lg overflow-hidden shadow-2xl animate-fadeIn">
+            <div className={`p-8 text-white flex justify-between items-center ${isCollection ? 'bg-violet-600' : 'bg-blue-600'}`}>
+              <div>
+                <h3 className="text-2xl font-black">Nuevo Cliente</h3>
+                <p className="text-white/80 text-sm">Registro express</p>
+              </div>
+              <button onClick={() => setIsQuickClientOpen(false)} className="text-2xl">✕</button>
+            </div>
+            <form onSubmit={handleQuickClientSave} className="p-8 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="text-[10px] font-black uppercase text-gray-400">Nombre / Empresa</label>
+                  <input required value={quickClient.name} onChange={e => setQuickClient({...quickClient, name: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400">NIT/CC</label>
+                  <input required value={quickClient.taxId} onChange={e => setQuickClient({...quickClient, taxId: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400">Email</label>
+                  <input type="email" required value={quickClient.email} onChange={e => setQuickClient({...quickClient, email: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
+                </div>
+              </div>
+              <button type="submit" className={`w-full py-5 text-white rounded-[24px] font-black shadow-xl mt-4 ${isCollection ? 'bg-violet-600 shadow-violet-100' : 'bg-blue-600 shadow-blue-100'}`}>Guardar y Seleccionar</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isQuickProductOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[250] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl">
+            <div className={`p-8 text-white flex justify-between items-center ${isCollection ? 'bg-violet-600' : 'bg-indigo-600'}`}>
+              <h3 className="text-2xl font-black">Nuevo Producto</h3>
+              <button onClick={() => setIsQuickProductOpen(false)} className="text-2xl">✕</button>
+            </div>
+            <form onSubmit={handleQuickProductSave} className="p-8 space-y-4">
+              <div>
+                <label className="text-[10px] font-black uppercase text-gray-400">Nombre del Producto</label>
+                <input required value={quickProduct.description} onChange={e => setQuickProduct({...quickProduct, description: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                 <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400">Stock Inicial</label>
+                  <input type="number" required value={quickProduct.stock || 0} onChange={e => setQuickProduct({...quickProduct, stock: parseInt(e.target.value)})} className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase text-gray-400">Precio Venta</label>
+                  <input type="number" required value={quickProduct.salePrice} onChange={e => setQuickProduct({...quickProduct, salePrice: parseFloat(e.target.value)})} className={`w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-black text-xl ${isCollection ? 'text-violet-600' : 'text-indigo-600'}`} />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-black uppercase text-gray-400">Código de Barras</label>
+                <div className="flex gap-2">
+                  <input value={quickProduct.barcode || ''} onChange={e => setQuickProduct({...quickProduct, barcode: e.target.value})} className="flex-1 p-4 bg-gray-50 rounded-2xl border-none outline-none font-bold" />
+                  <button type="button" onClick={() => startScanning('QUICK_PRODUCT')} className={`w-14 rounded-2xl flex items-center justify-center text-xl transition-colors ${isCollection ? 'bg-violet-100 text-violet-600 hover:bg-violet-200' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}>📷</button>
+                </div>
+              </div>
+              <button type="submit" className={`w-full py-5 text-white rounded-[24px] font-black shadow-xl mt-4 ${isCollection ? 'bg-violet-600 shadow-violet-100' : 'bg-indigo-600 shadow-indigo-100'}`}>Crear y Añadir</button>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 };

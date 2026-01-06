@@ -34,6 +34,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
   const [activeDocForPayment, setActiveDocForPayment] = useState<Document | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
+  const [paymentNote, setPaymentNote] = useState('');
 
   const isCollection = type === DocumentType.ACCOUNT_COLLECTION;
 
@@ -79,20 +80,26 @@ const DocumentList: React.FC<DocumentListProps> = ({
   };
 
   const handleOpenPayment = (doc: Document) => {
+    const total = calculateTotal(doc);
+    const paid = calculatePaid(doc);
+    const remaining = total - paid;
+    
     setActiveDocForPayment(doc);
-    const remaining = calculateTotal(doc) - calculatePaid(doc);
-    setPaymentAmount(remaining);
+    setPaymentAmount(remaining > 0 ? remaining : 0);
+    setPaymentMethod(doc.paymentMethod || 'Efectivo');
+    setPaymentNote('');
     setIsPaymentModalOpen(true);
   };
 
   const handleRegisterPayment = () => {
-    if (!activeDocForPayment) return;
+    if (!activeDocForPayment || paymentAmount <= 0) return;
 
     const newPayment: Payment = {
       id: Math.random().toString(36).substr(2, 9),
       date: new Date().toISOString().split('T')[0],
       amount: paymentAmount,
-      method: paymentMethod
+      method: paymentMethod,
+      note: paymentNote
     };
 
     const updatedPayments = [...(activeDocForPayment.payments || []), newPayment];
@@ -100,7 +107,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const docTotal = calculateTotal(activeDocForPayment);
 
     let newStatus = activeDocForPayment.status;
-    if (totalPaid >= docTotal) {
+    if (totalPaid >= docTotal - 1) { // -1 para evitar errores de redondeo
       newStatus = DocumentStatus.PAID;
     } else if (totalPaid > 0) {
       newStatus = DocumentStatus.PARTIAL;
@@ -109,7 +116,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const updatedDoc = {
       ...activeDocForPayment,
       payments: updatedPayments,
-      status: newStatus
+      status: newStatus,
+      paymentMethod: paymentMethod // Actualizamos el método preferido también
     };
 
     onUpdateDocument(updatedDoc);
@@ -150,40 +158,60 @@ const DocumentList: React.FC<DocumentListProps> = ({
         onCancel={() => setDocToDelete(null)}
       />
 
-      {/* Modal de Registro de Pago */}
+      {/* Modal de Registro de Pago (Corregido y Mejorado) */}
       {isPaymentModalOpen && activeDocForPayment && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden animate-slideUp">
-            <div className="bg-emerald-600 p-6 text-white">
-              <h3 className="text-xl font-black">Registrar Pago</h3>
-              <p className="text-emerald-100 text-xs">Doc: {activeDocForPayment.number}</p>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden animate-slideUp shadow-2xl">
+            <div className="bg-emerald-600 p-8 text-white relative">
+              <h3 className="text-2xl font-black tracking-tight">Cobrar Factura</h3>
+              <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest mt-1">Doc: {activeDocForPayment.number}</p>
+              <button onClick={() => setIsPaymentModalOpen(false)} className="absolute top-6 right-6 text-white/60 hover:text-white text-xl">✕</button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-8 space-y-6">
+              <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
+                 <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">Saldo Pendiente</p>
+                 <p className="text-2xl font-black text-emerald-900">{formatCurrency(calculateTotal(activeDocForPayment) - calculatePaid(activeDocForPayment))}</p>
+              </div>
+
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Monto del Pago</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Monto a Recibir</label>
                 <input 
                   type="number" 
+                  autoFocus
                   value={paymentAmount} 
                   onChange={e => setPaymentAmount(parseFloat(e.target.value))}
-                  className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-black text-2xl text-emerald-600"
+                  className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-black text-2xl text-emerald-600 focus:ring-2 focus:ring-emerald-500 transition-all"
                 />
               </div>
+
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Método</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Medio de Pago</label>
                 <select 
                   value={paymentMethod} 
                   onChange={e => setPaymentMethod(e.target.value)}
-                  className="w-full p-4 bg-gray-50 rounded-2xl font-bold"
+                  className="w-full p-4 bg-gray-50 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-emerald-500"
                 >
                   <option value="Efectivo">Efectivo</option>
-                  <option value="Transferencia">Transferencia</option>
-                  <option value="Nequi/Daviplata">Nequi/Daviplata</option>
-                  <option value="Tarjeta">Tarjeta</option>
+                  <option value="Transferencia">Transferencia Bancaria</option>
+                  <option value="Nequi">Nequi</option>
+                  <option value="Daviplata">Daviplata</option>
+                  <option value="Tarjeta">Tarjeta Débito/Crédito</option>
                 </select>
               </div>
-              <div className="flex gap-2 pt-2">
-                <button onClick={() => setIsPaymentModalOpen(false)} className="flex-1 py-4 font-bold text-gray-400">Cancelar</button>
-                <button onClick={handleRegisterPayment} className="flex-2 py-4 px-6 bg-emerald-600 text-white rounded-2xl font-black shadow-lg shadow-emerald-100">Confirmar Pago</button>
+
+              <div className="flex flex-col gap-2 pt-2">
+                <button 
+                  onClick={handleRegisterPayment} 
+                  className="w-full py-5 bg-emerald-600 text-white rounded-2xl font-black shadow-lg shadow-emerald-200 active:scale-95 transition-all uppercase tracking-widest text-xs"
+                >
+                  Confirmar Cobro
+                </button>
+                <button 
+                  onClick={() => setIsPaymentModalOpen(false)} 
+                  className="w-full py-4 font-bold text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  Cancelar
+                </button>
               </div>
             </div>
           </div>
@@ -193,7 +221,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">{type}S</h2>
-          <p className="text-gray-500 font-medium">Historial y gestión de {type.toLowerCase()}s</p>
+          <p className="text-gray-500 font-medium">Historial y gestión de cobros</p>
         </div>
         <button 
           onClick={() => navigate(`${getRouteBase(type)}/new`)}
@@ -201,8 +229,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
             isCollection ? 'bg-violet-600 shadow-violet-100 hover:bg-violet-700' : 'bg-blue-600 shadow-blue-100 hover:bg-blue-700'
           }`}
         >
-          <span className="text-xl">+</span>
-          <span>Crear Nueva</span>
+          <span className="text-xl font-black">+</span>
+          <span className="uppercase tracking-widest text-xs">Crear {type}</span>
         </button>
       </div>
 
@@ -238,6 +266,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
               <div className="space-y-1">
                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Cliente</p>
                 <p className="font-bold text-gray-800">{getClientName(doc.clientId)}</p>
+                <p className="text-[9px] font-bold text-gray-400">Vence: {doc.dueDate}</p>
               </div>
 
               <div className="flex justify-between items-end pt-4 border-t border-gray-50">
@@ -247,10 +276,10 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   {balance > 0 && <p className="text-[9px] font-black text-orange-600 uppercase">Saldo: {formatCurrency(balance)}</p>}
                 </div>
                 <div className="flex space-x-2">
-                  <button onClick={() => handleOpenPayment(doc)} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl" title="Registrar Pago">💸</button>
-                  <button onClick={() => handleExportPDF(doc)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">📥</button>
-                  <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-3 bg-blue-50 text-blue-600 rounded-xl">✏️</button>
-                  <button onClick={() => setDocToDelete(doc.id)} className="p-3 bg-rose-50 text-rose-600 rounded-xl">🗑️</button>
+                  <button onClick={() => handleOpenPayment(doc)} className="p-3 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors" title="Registrar Pago">💸</button>
+                  <button onClick={() => handleExportPDF(doc)} className="p-3 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors">📥</button>
+                  <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-3 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors">✏️</button>
+                  <button onClick={() => setDocToDelete(doc.id)} className="p-3 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors">🗑️</button>
                 </div>
               </div>
             </div>
@@ -292,10 +321,10 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end space-x-2">
-                      <button onClick={() => handleOpenPayment(doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl" title="Cobrar / Registrar Pago">💸</button>
-                      <button onClick={() => handleExportPDF(doc)} className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl" title="PDF">📥</button>
-                      <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl" title="Editar">✏️</button>
-                      <button onClick={() => setDocToDelete(doc.id)} className="p-2.5 text-rose-600 hover:bg-rose-100 bg-rose-50/50 rounded-xl" title="Eliminar">🗑️</button>
+                      <button onClick={() => handleOpenPayment(doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Cobrar / Registrar Pago">💸</button>
+                      <button onClick={() => handleExportPDF(doc)} className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all" title="PDF">📥</button>
+                      <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar">✏️</button>
+                      <button onClick={() => setDocToDelete(doc.id)} className="p-2.5 text-rose-600 hover:bg-rose-100 bg-rose-50/50 rounded-xl transition-all" title="Eliminar">🗑️</button>
                     </div>
                   </td>
                 </tr>
@@ -304,6 +333,12 @@ const DocumentList: React.FC<DocumentListProps> = ({
           </table>
         </div>
       </div>
+
+      {filteredDocs.length === 0 && (
+        <div className="py-20 text-center bg-white rounded-[32px] border border-gray-100">
+          <p className="text-gray-400 font-medium">No se encontraron registros.</p>
+        </div>
+      )}
     </div>
   );
 };
