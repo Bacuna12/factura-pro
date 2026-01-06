@@ -32,7 +32,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
   // Estados para Registro de Pago
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [activeDocForPayment, setActiveDocForPayment] = useState<Document | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentAmount, setPaymentAmount] = useState<string>('0');
   const [paymentMethod, setPaymentMethod] = useState('Efectivo');
   const [paymentNote, setPaymentNote] = useState('');
 
@@ -82,28 +82,29 @@ const DocumentList: React.FC<DocumentListProps> = ({
   const handleOpenPayment = (e: React.MouseEvent, doc: Document) => {
     e.preventDefault();
     e.stopPropagation();
+    
     const total = calculateTotal(doc);
     const paid = calculatePaid(doc);
     const remaining = total - paid;
     
     setActiveDocForPayment(doc);
-    setPaymentAmount(remaining > 0 ? remaining : 0);
+    setPaymentAmount(remaining > 0 ? remaining.toString() : '0');
     setPaymentMethod(doc.paymentMethod || 'Efectivo');
     setPaymentNote('');
     setIsPaymentModalOpen(true);
   };
 
   const handleRegisterPayment = () => {
-    const amount = Number(paymentAmount);
-    if (!activeDocForPayment || isNaN(amount) || amount < 0) {
-      alert("Por favor ingresa un monto válido.");
+    const amountNum = parseFloat(paymentAmount);
+    if (!activeDocForPayment || isNaN(amountNum) || amountNum < 0) {
+      alert("Por favor ingresa un monto de pago válido.");
       return;
     }
 
     const newPayment: Payment = {
       id: Math.random().toString(36).substr(2, 9),
       date: new Date().toISOString().split('T')[0],
-      amount: amount,
+      amount: amountNum,
       method: paymentMethod,
       note: paymentNote
     };
@@ -113,7 +114,8 @@ const DocumentList: React.FC<DocumentListProps> = ({
     const docTotal = calculateTotal(activeDocForPayment);
 
     let newStatus = activeDocForPayment.status;
-    if (totalPaid >= docTotal - 1) { 
+    // Si el total pagado es igual o mayor al total (margen de 1 unidad por redondeo)
+    if (totalPaid >= docTotal - 0.5) { 
       newStatus = DocumentStatus.PAID;
     } else if (totalPaid > 0) {
       newStatus = DocumentStatus.PARTIAL;
@@ -164,13 +166,13 @@ const DocumentList: React.FC<DocumentListProps> = ({
         onCancel={() => setDocToDelete(null)}
       />
 
-      {/* Modal de Registro de Pago (Reforzado) */}
+      {/* Modal de Registro de Pago (Corregido y Mejorado) */}
       {isPaymentModalOpen && activeDocForPayment && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden animate-slideUp shadow-2xl">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onClick={() => setIsPaymentModalOpen(false)}>
+          <div className="bg-white rounded-[32px] w-full max-w-sm overflow-hidden animate-slideUp shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="bg-emerald-600 p-8 text-white relative">
-              <h3 className="text-2xl font-black tracking-tight">Cobrar Documento</h3>
-              <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest mt-1">Doc: {activeDocForPayment.number}</p>
+              <h3 className="text-2xl font-black tracking-tight">Registrar Cobro</h3>
+              <p className="text-emerald-100 text-xs font-bold uppercase tracking-widest mt-1">Documento: {activeDocForPayment.number}</p>
               <button onClick={() => setIsPaymentModalOpen(false)} className="absolute top-6 right-6 text-white/60 hover:text-white text-xl">✕</button>
             </div>
             <div className="p-8 space-y-6">
@@ -180,19 +182,19 @@ const DocumentList: React.FC<DocumentListProps> = ({
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Monto del Pago</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Monto a Recibir</label>
                 <input 
                   type="number" 
                   autoFocus
                   value={paymentAmount} 
-                  onChange={e => setPaymentAmount(Number(e.target.value))}
+                  onChange={e => setPaymentAmount(e.target.value)}
                   className="w-full p-4 bg-gray-50 rounded-2xl border-none outline-none font-black text-2xl text-emerald-600 focus:ring-2 focus:ring-emerald-500 transition-all"
                   placeholder="0"
                 />
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Método de Pago</label>
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Medio de Pago</label>
                 <select 
                   value={paymentMethod} 
                   onChange={e => setPaymentMethod(e.target.value)}
@@ -205,20 +207,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   <option value="Tarjeta">Tarjeta Débito/Crédito</option>
                 </select>
               </div>
-
-              {activeDocForPayment.payments && activeDocForPayment.payments.length > 0 && (
-                <div className="pt-2">
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Historial de Abonos</p>
-                  <div className="max-h-24 overflow-y-auto space-y-1">
-                    {activeDocForPayment.payments.map((p, i) => (
-                      <div key={i} className="flex justify-between text-[10px] font-bold text-gray-500 bg-gray-50 p-2 rounded-lg">
-                        <span>{p.date} - {p.method}</span>
-                        <span className="text-emerald-600">{formatCurrency(p.amount)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               <div className="flex flex-col gap-2 pt-2">
                 <button 
@@ -242,7 +230,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-3xl font-black text-gray-900 tracking-tight">{type}S</h2>
-          <p className="text-gray-500 font-medium">Historial y gestión de cobros</p>
+          <p className="text-gray-500 font-medium">Historial y cobros recientes</p>
         </div>
         <button 
           onClick={() => navigate(`${getRouteBase(type)}/new`)}
@@ -294,10 +282,16 @@ const DocumentList: React.FC<DocumentListProps> = ({
                 <div className="flex-1">
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Total</p>
                   <p className="text-xl font-black text-gray-900">{formatCurrency(total)}</p>
-                  {balance > 0 && <p className="text-[9px] font-black text-orange-600 uppercase">Saldo: {formatCurrency(balance)}</p>}
+                  {balance > 0.5 && <p className="text-[9px] font-black text-orange-600 uppercase">Saldo: {formatCurrency(balance)}</p>}
                 </div>
                 <div className="flex space-x-2">
-                  <button onClick={(e) => handleOpenPayment(e, doc)} className="w-10 h-10 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-colors shadow-sm" title="Registrar Pago">💸</button>
+                  <button 
+                    onClick={(e) => handleOpenPayment(e, doc)} 
+                    className="w-12 h-12 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-2xl hover:bg-emerald-100 transition-all shadow-sm border border-emerald-100" 
+                    title="Cobrar"
+                  >
+                    <span className="text-xl">💸</span>
+                  </button>
                   <button onClick={() => handleExportPDF(doc)} className="w-10 h-10 flex items-center justify-center bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors shadow-sm">📥</button>
                   <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="w-10 h-10 flex items-center justify-center bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors shadow-sm">✏️</button>
                   <button onClick={() => setDocToDelete(doc.id)} className="w-10 h-10 flex items-center justify-center bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors shadow-sm">🗑️</button>
@@ -338,11 +332,11 @@ const DocumentList: React.FC<DocumentListProps> = ({
                   </td>
                   <td className="px-6 py-4">
                     <p className="font-black text-gray-900">{formatCurrency(total)}</p>
-                    {balance > 0 && <p className="text-[9px] font-black text-orange-600 uppercase tracking-tighter">Saldo: {formatCurrency(balance)}</p>}
+                    {balance > 0.5 && <p className="text-[9px] font-black text-orange-600 uppercase tracking-tighter">Saldo: {formatCurrency(balance)}</p>}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end space-x-2">
-                      <button onClick={(e) => handleOpenPayment(e, doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Cobrar / Registrar Pago">💸</button>
+                      <button onClick={(e) => handleOpenPayment(e, doc)} className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all" title="Registrar Pago">💸</button>
                       <button onClick={() => handleExportPDF(doc)} className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all" title="PDF">📥</button>
                       <button onClick={() => navigate(`${getRouteBase(doc.type)}/edit/${doc.id}`)} className="p-2.5 text-blue-600 hover:bg-blue-50 rounded-xl transition-all" title="Editar">✏️</button>
                       <button onClick={() => setDocToDelete(doc.id)} className="p-2.5 text-rose-600 hover:bg-rose-100 bg-rose-50/50 rounded-xl transition-all" title="Eliminar">🗑️</button>
