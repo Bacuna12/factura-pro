@@ -96,7 +96,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 <p className="text-[10px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest">¿Cómo solucionarlo?</p>
                 <ol className="text-[10px] font-bold text-blue-800 dark:text-blue-400 space-y-2 list-decimal ml-4 text-left">
                   <li>Ve a tu panel de <b>Supabase</b>.</li>
-                  <li>Entra en <b>Authentication</b> -> <b>Providers</b>.</li>
+                  <li>Entra en <b>Authentication</b> {' → '} <b>Providers</b>.</li>
                   <li>En la sección <b>Email</b>:
                     <ul className="mt-1 list-disc ml-4">
                       <li>Activa <b>"Enable Email provider"</b>.</li>
