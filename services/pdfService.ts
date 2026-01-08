@@ -171,8 +171,9 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     cursorY += 50;
     if (doc.signature) {
       try { 
-        // Cast to any to bypass potential strict type overloads in Vercel environment
-        (pdf as any).addImage(doc.signature, 'PNG', 20 as any, (cursorY - 15) as any, 40 as any, 15 as any); 
+        // Llamado sin tipos para evitar conflictos de sobrecarga en Vercel
+        const p: any = pdf;
+        p.addImage(doc.signature, 'PNG', 20, cursorY - 15, 40, 15); 
       } catch(e) {}
     }
     pdf.line(20, cursorY, 90, cursorY);
