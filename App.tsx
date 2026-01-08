@@ -45,8 +45,8 @@ const EditDocumentWrapper: React.FC<{
   clients: Client[], 
   products: Product[], 
   onSave: (doc: Document) => void | Promise<void>,
-  onUpdateClients: (client: any) => void | Promise<void>,
-  onUpdateProducts: (product: any) => void | Promise<void>,
+  onUpdateClients: (client: Client) => void | Promise<void>,
+  onUpdateProducts: (product: Product) => void | Promise<void>,
   settings: AppSettings,
   hasActiveCashSession: boolean
 }> = ({ documents, ...props }) => {
@@ -338,8 +338,8 @@ const App: React.FC = () => {
     clients,
     products,
     onSave: handleSaveDocument,
-    onUpdateClients: handleSaveClient as any,
-    onUpdateProducts: handleSaveProduct as any,
+    onUpdateClients: handleSaveClient,
+    onUpdateProducts: handleSaveProduct,
     settings,
     hasActiveCashSession
   };
