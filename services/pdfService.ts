@@ -171,7 +171,10 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     pdf.text(`CIUDAD: ${doc.bankCity || settings.bankCity || 'N/A'}`, 25, cursorY + 29);
     cursorY += 50;
     if (doc.signature) {
-      try { pdf.addImage(doc.signature, 'PNG', 20, cursorY - 15, 40, 15); } catch(e) {}
+      try { 
+        // Cast to any to bypass potential strict type overloads in specific environments
+        (pdf as any).addImage(doc.signature, 'PNG', 20, cursorY - 15, 40, 15); 
+      } catch(e) {}
     }
     pdf.line(20, cursorY, 90, cursorY);
     pdf.setFont('helvetica', 'bold');

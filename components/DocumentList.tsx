@@ -14,7 +14,7 @@ interface DocumentListProps {
   settings: AppSettings;
   onDelete: (id: string) => void;
   onUpdateDocument: (doc: Document) => void;
-  onUpdateProducts: (products: Product[]) => void;
+  onUpdateProduct: (product: Product) => void;
 }
 
 const DocumentList: React.FC<DocumentListProps> = ({ 
@@ -298,7 +298,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
                  const isPOSRow = !!doc.isPOS && doc.type === DocumentType.INVOICE;
                  
                  return (
-                  <tr key={doc.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                  <tr key={doc.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors group">
                     <td className="px-8 py-5">
                        <p className="font-bold text-gray-900 dark:text-white">#{doc.number}</p>
                        <p className="text-[10px] text-gray-400">{doc.date} • {formatTime(doc.createdAt)}</p>

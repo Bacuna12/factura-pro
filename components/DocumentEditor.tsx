@@ -22,8 +22,8 @@ interface DocumentEditorProps {
   clients: Client[];
   products: Product[];
   onSave: (doc: Document) => void;
-  onUpdateClients: (clients: Client[]) => void;
-  onUpdateProducts: (products: Product[]) => void;
+  onUpdateClients: (client: Client) => void;
+  onUpdateProducts: (product: Product) => void;
   settings: AppSettings;
   initialData?: Document;
   onDelete?: (id: string) => void;

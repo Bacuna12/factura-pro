@@ -353,9 +353,7 @@ const App: React.FC = () => {
     settings,
     onDelete: handleDeleteDoc,
     onUpdateDocument: handleSaveDocument,
-    onUpdateProducts: (prods: Product[]) => { 
-        prods.forEach(p => handleSaveProduct(p));
-    }
+    onUpdateProduct: handleSaveProduct
   };
 
   return (
@@ -367,7 +365,7 @@ const App: React.FC = () => {
           ))}
           <Routes>
             <Route path="/" element={<Dashboard user={user} documents={documents} expenses={expenses} clientsCount={clients.length} settings={settings} onDeleteDoc={handleDeleteDoc} onUpdateDoc={handleSaveDocument} clients={clients} products={products} />} />
-            <Route path="/search" element={<DocumentHistory {...listProps} />} />
+            <Route path="/search" element={<DocumentHistory user={user} documents={documents} clients={clients} settings={settings} onDelete={handleDeleteDoc} onUpdateDocument={handleSaveDocument} />} />
             <Route path="/cash" element={<CashRegister user={user} settings={settings} sessions={sessions} movements={movements} documents={documents} onSaveSession={handleSaveSession} onSaveMovement={handleSaveMovement} />} />
             <Route path="/pos" element={<POS user={user} products={products} clients={clients} settings={settings} onSaveDocument={handleSaveDocument} onSaveClient={handleSaveClient} hasActiveCashSession={hasActiveCashSession} />} />
             <Route path="/invoices" element={<DocumentList type={DocumentType.INVOICE} {...listProps} />} />
