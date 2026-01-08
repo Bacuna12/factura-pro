@@ -26,8 +26,27 @@ export enum UserRole {
   SELLER = 'VENDEDOR'
 }
 
+export enum CashSessionStatus {
+  OPEN = 'OPEN',
+  CLOSED = 'CLOSED'
+}
+
+export enum CashMovementType {
+  IN = 'INGRESO',
+  OUT = 'EGRESO'
+}
+
+export type NotificationType = 'success' | 'error' | 'info';
+
+export interface Notification {
+  id: string;
+  message: string;
+  type: NotificationType;
+}
+
 export interface User {
   id: string;
+  tenantId: string; 
   username: string;
   password?: string;
   name: string;
@@ -36,9 +55,11 @@ export interface User {
 
 export interface Client {
   id: string;
+  tenantId: string;
   name: string;
   email: string;
   phone: string;
+  taxIdType: 'Cédula' | 'NIT';
   taxId: string;
   address: string;
   city: string;
@@ -48,6 +69,7 @@ export interface Client {
 
 export interface Product {
   id: string;
+  tenantId: string;
   description: string;
   purchasePrice: number;
   salePrice: number;
@@ -72,18 +94,47 @@ export interface Payment {
   amount: number;
   method: string;
   note?: string;
+  received?: number; 
+  change?: number;   
 }
 
 export interface Expense {
   id: string;
+  tenantId: string;
   date: string;
   description: string;
   amount: number;
   category: string;
+  productId?: string; // Vinculación con inventario
+}
+
+export interface CashSession {
+  id: string;
+  tenantId: string;
+  userId: string;
+  userName: string;
+  openedAt: string;
+  closedAt?: string;
+  openingBalance: number;
+  expectedBalance: number; // Calculado: opening + cash sales + in - out
+  actualBalance?: number;  // Contado por el usuario al cerrar
+  difference?: number;     // actual - expected
+  status: CashSessionStatus;
+}
+
+export interface CashMovement {
+  id: string;
+  tenantId: string;
+  sessionId: string;
+  type: CashMovementType;
+  amount: number;
+  description: string;
+  date: string;
 }
 
 export interface Document {
   id: string;
+  tenantId: string;
   type: DocumentType;
   number: string;
   date: string;
@@ -98,10 +149,18 @@ export interface Document {
   payments?: Payment[];
   paymentMethod?: string;
   isPOS?: boolean;
-  signature?: string; // Firma digital en base64
+  signature?: string; 
+  createdByName?: string; 
+  createdAt?: string;
+  // Campos bancarios específicos por documento
+  bankName?: string;
+  accountType?: string;
+  accountNumber?: string;
+  bankCity?: string;
 }
 
 export interface AppSettings {
+  tenantId: string;
   currency: string;
   companyName: string;
   companyId: string;
@@ -109,6 +168,10 @@ export interface AppSettings {
   defaultTaxRate: number;
   logo?: string;
   pdfTemplate?: PdfTemplate;
+  bankName?: string;
+  accountType?: string;
+  accountNumber?: string;
+  bankCity?: string;
 }
 
 export interface BackupData {

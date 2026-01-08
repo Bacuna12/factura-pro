@@ -7,11 +7,12 @@ import ConfirmModal from './ConfirmModal';
 interface ProductManagerProps {
   user: User;
   products: Product[];
-  onUpdateProducts: (products: Product[]) => void;
+  onSaveProduct: (product: Product) => void;
+  onDeleteProduct: (id: string) => void;
   settings: AppSettings;
 }
 
-const ProductManager: React.FC<ProductManagerProps> = ({ user, products, onUpdateProducts, settings }) => {
+const ProductManager: React.FC<ProductManagerProps> = ({ user, products, onSaveProduct, onDeleteProduct, settings }) => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
@@ -29,19 +30,23 @@ const ProductManager: React.FC<ProductManagerProps> = ({ user, products, onUpdat
     return products.filter(p => {
       const lowerSearch = searchTerm.toLowerCase();
       const matchesSearch = p.description.toLowerCase().includes(lowerSearch) || 
-                           (p.sku || '').toLowerCase().includes(lowerSearch) ||
-                           (p.barcode || '').toLowerCase().includes(lowerSearch);
+                           (p.barcode && p.barcode.includes(searchTerm)) ||
+                           (p.sku && p.sku.toLowerCase().includes(lowerSearch));
       const matchesCategory = activeCategory === 'Todas' || (p.category || 'General') === activeCategory;
       return matchesSearch && matchesCategory;
     });
   }, [products, searchTerm, activeCategory]);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: settings.currency,
-      minimumFractionDigits: 0
-    }).format(amount);
+    try {
+      return new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: settings.currency || 'COP',
+        minimumFractionDigits: 0
+      }).format(amount);
+    } catch (e) {
+      return (settings.currency || '$') + ' ' + amount.toLocaleString('es-CO');
+    }
   };
 
   const handleOptimizeWithAi = async () => {
@@ -65,6 +70,7 @@ const ProductManager: React.FC<ProductManagerProps> = ({ user, products, onUpdat
   const openAddModal = () => {
     setEditingProduct({
       id: Math.random().toString(36).substr(2, 9),
+      tenantId: user.tenantId,
       description: '',
       purchasePrice: 0,
       salePrice: 0,
@@ -91,16 +97,7 @@ const ProductManager: React.FC<ProductManagerProps> = ({ user, products, onUpdat
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
-
-    const exists = products.find(p => p.id === editingProduct.id);
-    let newProducts;
-    if (exists) {
-      newProducts = products.map(p => p.id === editingProduct.id ? editingProduct : p);
-    } else {
-      newProducts = [editingProduct, ...products];
-    }
-
-    onUpdateProducts(newProducts);
+    onSaveProduct(editingProduct);
     setIsModalOpen(false);
     setEditingProduct(null);
   };
@@ -112,7 +109,7 @@ const ProductManager: React.FC<ProductManagerProps> = ({ user, products, onUpdat
         title="Eliminar Producto"
         message="¿Estás seguro de que deseas eliminar este producto de tu catálogo?"
         onConfirm={() => {
-          onUpdateProducts(products.filter(p => p.id !== productToDelete));
+          if (productToDelete) onDeleteProduct(productToDelete);
           setProductToDelete(null);
         }}
         onCancel={() => setProductToDelete(null)}
@@ -267,13 +264,6 @@ const ProductManager: React.FC<ProductManagerProps> = ({ user, products, onUpdat
                       />
                     )}
                   </div>
-                  {editingProduct.image && (
-                    <button 
-                      type="button" 
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-full py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-widest"
-                    >Cambiar Imagen</button>
-                  )}
                 </div>
 
                 <div className="md:col-span-2 space-y-5">
@@ -288,11 +278,11 @@ const ProductManager: React.FC<ProductManagerProps> = ({ user, products, onUpdat
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[10px] font-black text-slate-900 dark:text-slate-500 uppercase tracking-widest mb-2 ml-2">Costo de Compra</label>
-                      <input type="number" required value={editingProduct.purchasePrice} onChange={e => setEditingProduct({...editingProduct, purchasePrice: parseFloat(e.target.value)})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-gray-100 dark:border-slate-800 rounded-2xl font-black text-lg" />
+                      <input type="number" step="any" required value={editingProduct.purchasePrice} onChange={e => setEditingProduct({...editingProduct, purchasePrice: parseFloat(e.target.value)})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-gray-100 dark:border-slate-800 rounded-2xl font-black text-lg" />
                     </div>
                     <div>
                       <label className="block text-[10px] font-black text-slate-900 dark:text-slate-500 uppercase tracking-widest mb-2 ml-2">Precio de Venta</label>
-                      <input type="number" required value={editingProduct.salePrice} onChange={e => setEditingProduct({...editingProduct, salePrice: parseFloat(e.target.value)})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 text-blue-600 dark:text-blue-400 border border-gray-100 dark:border-slate-800 rounded-2xl font-black text-lg" />
+                      <input type="number" step="any" required value={editingProduct.salePrice} onChange={e => setEditingProduct({...editingProduct, salePrice: parseFloat(e.target.value)})} className="w-full p-4 bg-gray-50 dark:bg-slate-900 text-blue-600 dark:text-blue-400 border border-gray-100 dark:border-slate-800 rounded-2xl font-black text-lg" />
                     </div>
                   </div>
 

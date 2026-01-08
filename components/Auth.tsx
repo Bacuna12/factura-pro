@@ -1,152 +1,151 @@
 
-import React, { useState, useEffect } from 'react';
-import { User, AppSettings, UserRole } from '../types';
+import React, { useState } from 'react';
+import { User, UserRole } from '../types';
+import { supabase, getSupabaseConfigError, isSupabaseConfigured } from '../services/supabaseClient';
 
 interface AuthProps {
-  onLogin: (user: User, settings?: AppSettings) => void;
+  onLogin: (user: User) => void;
 }
 
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
-  const [mode, setMode] = useState<'LOGIN' | 'RECOVERY'>('LOGIN');
-  const [error, setError] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState('');
+  const [showFixGuide, setShowFixGuide] = useState<'NONE' | 'EMAIL_DISABLED' | 'CONFIRMATION_PENDING'>('NONE');
+  const [formData, setFormData] = useState({ email: '', password: '' });
 
-  const [formData, setFormData] = useState({
-    username: '', 
-    password: '',
-  });
+  const configError = getSupabaseConfigError();
+  const isConfigured = isSupabaseConfigured();
 
-  useEffect(() => {
-    const remembered = localStorage.getItem('facturapro_remembered');
-    if (remembered) {
-      try {
-        const { username, password } = JSON.parse(remembered);
-        setFormData(prev => ({ ...prev, username, password }));
-        setRememberMe(true);
-      } catch (e) {
-        console.error("Error loading remembered data");
-      }
-    }
-  }, []);
-
-  const handleLogin = (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setIsProcessing(true);
     
-    // Pequeño delay para feedback visual
-    setTimeout(() => {
-      const users = JSON.parse(localStorage.getItem('facturapro_users') || '[]');
-      const foundUser = users.find((u: User) => u.username === formData.username && u.password === formData.password);
-      
-      if (foundUser) {
-        if (rememberMe) {
-          localStorage.setItem('facturapro_remembered', JSON.stringify({
-            username: formData.username,
-            password: formData.password
-          }));
-        } else {
-          localStorage.removeItem('facturapro_remembered');
-        }
-        onLogin(foundUser);
-      } else {
-        setError('Credenciales incorrectas o usuario no registrado');
-        setIsProcessing(false);
-      }
-    }, 600);
-  };
+    if (!isConfigured) {
+      setError(`⚠️ Configuración pendiente: ${configError}`);
+      return;
+    }
 
-  const handleRecovery = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('Funcionalidad de recuperación temporalmente deshabilitada. Contacta al administrador.');
+    setIsProcessing(true);
+    setError('');
+    setShowFixGuide('NONE');
+
+    try {
+      // PROCESO DE INICIO DE SESIÓN ÚNICAMENTE
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email: formData.email.trim(),
+        password: formData.password,
+      });
+
+      if (signInError) throw signInError;
+
+      if (data.user) {
+        // Mapeo del usuario autenticado
+        const user: User = {
+          id: data.user.id,
+          tenantId: data.user.user_metadata?.tenantId || data.user.id, 
+          username: data.user.email || '',
+          name: data.user.user_metadata?.full_name || 'Usuario Autorizado',
+          role: data.user.user_metadata?.role || UserRole.ADMIN
+        };
+        onLogin(user);
+      }
+    } catch (err: any) {
+      console.error("Auth Error:", err);
+      let msg = err.message || 'Error de conexión';
+      
+      if (msg.includes('Email logins are disabled')) {
+        msg = '🚫 ERROR: El proveedor de Email está desactivado en Supabase.';
+        setShowFixGuide('EMAIL_DISABLED');
+      } else if (msg.includes('Email not confirmed')) {
+        msg = '⚠️ Email no confirmado. Debes desactivar la confirmación en Supabase Auth Settings.';
+        setShowFixGuide('CONFIRMATION_PENDING');
+      } else if (msg.includes('Invalid login credentials')) {
+        msg = '❌ Acceso denegado. Usuario no encontrado o contraseña incorrecta. Asegúrate de que el usuario haya sido creado en el panel de Supabase.';
+      }
+      
+      setError(msg);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6 relative overflow-hidden transition-colors duration-500">
-      
+    <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4 md:p-6 relative overflow-hidden">
       {/* Elementos decorativos de fondo */}
-      <div className="absolute top-0 left-0 w-96 h-96 bg-blue-100 dark:bg-blue-900/20 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
-      <div className="absolute bottom-0 right-0 w-96 h-96 bg-indigo-100 dark:bg-indigo-900/20 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+      <div className="absolute top-0 -left-20 w-72 h-72 bg-blue-600/20 rounded-full blur-3xl animate-blob"></div>
+      <div className="absolute bottom-0 -right-20 w-72 h-72 bg-emerald-600/10 rounded-full blur-3xl animate-blob animation-delay-2000"></div>
 
-      <div className="w-full max-w-md z-10">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-[24px] shadow-xl text-white text-3xl font-black mb-4">FP</div>
-          <h1 className="text-4xl font-black text-slate-900 dark:text-white tracking-tighter">FacturaPro</h1>
+      <div className="w-full max-w-md bg-white dark:bg-slate-950 rounded-[40px] md:rounded-[48px] shadow-2xl p-6 md:p-10 space-y-8 animate-fadeIn border border-white/10 relative z-10">
+        <div className="text-center">
+          <div className="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[24px] md:rounded-[28px] text-white text-3xl md:text-4xl font-black flex items-center justify-center mx-auto mb-4 md:mb-6 shadow-2xl shadow-blue-500/20">FP</div>
+          <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tighter">
+            FacturaPro <span className="text-blue-600">Cloud</span>
+          </h1>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+            Gestión Profesional con Sincronización
+          </p>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 p-8 rounded-[40px] shadow-2xl border border-slate-100 dark:border-slate-800">
-          <h2 className="text-2xl font-black text-slate-800 dark:text-white mb-2">
-            {mode === 'RECOVERY' ? 'Recuperar acceso' : 'Bienvenido'}
-          </h2>
-          <p className="text-slate-400 dark:text-slate-500 font-medium text-sm mb-8">
-            {mode === 'RECOVERY' ? 'Ingresa tu correo para recuperar tus datos' : 'Ingresa tus credenciales para continuar'}
-          </p>
-
-          {error && <div className="mb-6 p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 text-rose-600 dark:text-rose-400 rounded-2xl text-xs font-bold">{error}</div>}
-
-          <form onSubmit={mode === 'RECOVERY' ? handleRecovery : handleLogin} className="space-y-5">
-            <div className="space-y-4">
-              <input 
-                type="text" 
-                required
-                placeholder="Email o Usuario"
-                value={formData.username}
-                onChange={e => setFormData({...formData, username: e.target.value})}
-                className="w-full p-4 bg-slate-50 dark:bg-slate-800 dark:text-white border border-slate-100 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all text-sm"
-              />
-              
-              {mode === 'LOGIN' && (
-                <div className="space-y-4 animate-fadeIn">
-                  <input 
-                    type="password" required placeholder="Contraseña"
-                    value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})}
-                    className="w-full p-4 bg-slate-50 dark:bg-slate-800 dark:text-white border border-slate-100 dark:border-slate-700 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 font-bold transition-all text-sm"
-                  />
-                  
-                  <div className="flex items-center justify-between px-1">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={rememberMe} 
-                        onChange={e => setRememberMe(e.target.checked)}
-                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-[10px] font-black uppercase text-slate-400">Recordarme</span>
-                    </label>
-                    <button 
-                      type="button" 
-                      onClick={() => setMode('RECOVERY')}
-                      className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400"
-                    >
-                      Olvidé mi clave
-                    </button>
-                  </div>
-                </div>
-              )}
+        {error && (
+          <div className="space-y-4">
+            <div className="p-5 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 text-[11px] font-bold rounded-3xl border border-rose-200 dark:border-rose-800/50 text-left leading-relaxed">
+              {error}
             </div>
-
-            <button 
-              type="submit" 
-              disabled={isProcessing} 
-              className="w-full py-5 bg-blue-600 text-white font-black rounded-3xl shadow-xl shadow-blue-200 dark:shadow-none hover:bg-blue-700 transition-all active:scale-[0.98] mt-4 flex items-center justify-center uppercase tracking-widest text-xs"
-            >
-              {isProcessing ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : <span>{mode === 'RECOVERY' ? 'Recuperar' : 'Entrar'}</span>}
-            </button>
             
-            {mode === 'RECOVERY' && (
-              <button 
-                type="button" 
-                onClick={() => setMode('LOGIN')} 
-                className="w-full text-sm font-bold text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-              >
-                Volver al inicio de sesión
-              </button>
+            {showFixGuide !== 'NONE' && (
+              <div className="p-5 bg-blue-50 dark:bg-blue-900/30 rounded-3xl border border-blue-100 dark:border-blue-800 space-y-3">
+                <p className="text-[10px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest">¿Cómo solucionarlo?</p>
+                <ol className="text-[10px] font-bold text-blue-800 dark:text-blue-400 space-y-2 list-decimal ml-4 text-left">
+                  <li>Ve a tu panel de <b>Supabase</b>.</li>
+                  <li>Entra en <b>Authentication</b> -> <b>Providers</b>.</li>
+                  <li>En la sección <b>Email</b>:
+                    <ul className="mt-1 list-disc ml-4">
+                      <li>Activa <b>"Enable Email provider"</b>.</li>
+                      <li>Desactiva <b>"Confirm Email"</b>.</li>
+                    </ul>
+                  </li>
+                  <li>Guarda y vuelve a intentar aquí.</li>
+                </ol>
+              </div>
             )}
-          </form>
+          </div>
+        )}
 
-          <div className="mt-10 pt-6 border-t border-slate-50 dark:border-slate-800 text-center">
-             <p className="text-[10px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em]">Acceso Restringido • Solo Usuarios Autorizados</p>
+        <form onSubmit={handleAuth} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Email</label>
+            <input 
+              type="email" required 
+              value={formData.email}
+              onChange={e => setFormData({...formData, email: e.target.value})}
+              className="w-full p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white transition-all" 
+              placeholder="admin@ejemplo.com"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Contraseña</label>
+            <input 
+              type="password" required 
+              value={formData.password}
+              onChange={e => setFormData({...formData, password: e.target.value})}
+              className="w-full p-4 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 dark:text-white transition-all" 
+              placeholder="••••••••"
+            />
+          </div>
+          <button 
+            type="submit" 
+            disabled={isProcessing}
+            className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-[28px] font-black shadow-xl transition-all text-xs uppercase tracking-widest active:scale-95 disabled:opacity-50"
+          >
+            {isProcessing ? 'Verificando...' : 'Entrar al Sistema'}
+          </button>
+        </form>
+
+        <div className="text-center space-y-4 pt-4">
+          <p className="text-[10px] font-bold text-slate-400">
+            Si no tienes acceso, contacta con tu administrador.
+          </p>
+          <div className="opacity-30">
+             <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">V4.8 • Secure Admin Access</p>
           </div>
         </div>
       </div>

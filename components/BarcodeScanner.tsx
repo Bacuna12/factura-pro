@@ -13,12 +13,15 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
 
   useEffect(() => {
     let stream: MediaStream | null = null;
-    let intervalId: number | null = null;
 
     const startCamera = async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+          video: { 
+            facingMode: 'environment', 
+            width: { ideal: 1280 }, 
+            height: { ideal: 720 } 
+          }
         });
         
         if (videoRef.current) {
@@ -26,19 +29,23 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
           setIsScanning(true);
         }
 
-        // Usar BarcodeDetector si está disponible (Nativo en Android Chrome)
+        // Detección nativa optimizada para Android/Chrome
         if ('BarcodeDetector' in window) {
           const barcodeDetector = new (window as any).BarcodeDetector({
             formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'qr_code', 'upc_a']
           });
 
           const detect = async () => {
-            if (videoRef.current && videoRef.current.readyState === 4) {
+            if (videoRef.current && videoRef.current.readyState === 4 && isScanning) {
               try {
                 const barcodes = await barcodeDetector.detect(videoRef.current);
                 if (barcodes.length > 0) {
+                  // Feedback táctil (Vibración de éxito tipo APK)
+                  if ('vibrate' in navigator) {
+                    navigator.vibrate(100);
+                  }
                   onScan(barcodes[0].rawValue);
-                  stopCamera();
+                  // No cerramos inmediatamente por si el usuario quiere escanear varios
                 }
               } catch (e) {
                 console.error("Detection error:", e);
@@ -48,29 +55,26 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
           };
           detect();
         } else {
-          setError("Tu navegador no soporta escaneo nativo. Intenta usar Chrome en Android.");
+          setError("Escaneo nativo no soportado en este navegador. Usa Chrome en Android.");
         }
       } catch (err) {
-        setError("No se pudo acceder a la cámara. Asegúrate de dar los permisos.");
+        setError("Permiso de cámara denegado. Ve a los ajustes de tu Android y permite el acceso a la cámara para esta app.");
       }
-    };
-
-    const stopCamera = () => {
-      setIsScanning(false);
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-      if (intervalId) clearInterval(intervalId);
     };
 
     startCamera();
 
-    return () => stopCamera();
-  }, [onScan]);
+    return () => {
+      setIsScanning(false);
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [onScan, isScanning]);
 
   return (
-    <div className="fixed inset-0 bg-black z-[300] flex flex-col items-center justify-center p-6 animate-fadeIn">
-      <div className="relative w-full max-w-sm aspect-[3/4] bg-gray-900 rounded-[40px] overflow-hidden shadow-2xl border-4 border-white/10">
+    <div className="fixed inset-0 bg-black/90 z-[1000] flex flex-col items-center justify-center p-6 animate-fadeIn backdrop-blur-md">
+      <div className="relative w-full max-w-sm aspect-[3/4] bg-slate-900 rounded-[48px] overflow-hidden shadow-2xl border-4 border-white/10">
         <video 
           ref={videoRef} 
           autoPlay 
@@ -78,41 +82,49 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScan, onClose }) => {
           className="w-full h-full object-cover"
         />
         
-        {/* Visor de escaneo */}
+        {/* Interfaz de escaneo visual */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="w-64 h-40 border-2 border-blue-500 rounded-3xl relative">
-            <div className="absolute inset-0 bg-blue-500/10 animate-pulse rounded-3xl"></div>
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-[2px] bg-blue-400 shadow-[0_0_15px_rgba(96,165,250,0.8)] animate-scannerLoop"></div>
+          <div className="w-64 h-48 border-2 border-blue-500 rounded-[32px] relative shadow-[0_0_50px_rgba(37,99,235,0.2)]">
+            <div className="absolute inset-0 bg-blue-500/5 animate-pulse rounded-[32px]"></div>
+            
+            {/* Esquinas del visor */}
+            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-blue-500 rounded-tl-xl"></div>
+            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-blue-500 rounded-tr-xl"></div>
+            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-blue-500 rounded-bl-xl"></div>
+            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-blue-500 rounded-br-xl"></div>
+
+            {/* Línea láser animada */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[90%] h-[2px] bg-blue-400 shadow-[0_0_20px_rgba(96,165,250,1)] animate-scannerLoop"></div>
           </div>
-          <p className="mt-8 text-white font-black text-xs uppercase tracking-[0.2em] bg-black/40 px-4 py-2 rounded-full backdrop-blur-md">
-            Enfoca el código de barras
+          <p className="mt-10 text-white font-black text-[10px] uppercase tracking-[0.3em] bg-blue-600/80 px-6 py-2.5 rounded-full backdrop-blur-sm border border-white/20">
+            Escaneando código...
           </p>
         </div>
 
         {error && (
-          <div className="absolute inset-0 bg-rose-600/90 flex flex-col items-center justify-center text-white p-10 text-center">
-            <span className="text-4xl mb-4">⚠️</span>
-            <p className="font-bold">{error}</p>
-            <button onClick={onClose} className="mt-6 px-6 py-2 bg-white text-rose-600 rounded-xl font-black text-xs uppercase">Cerrar</button>
+          <div className="absolute inset-0 bg-rose-600/95 flex flex-col items-center justify-center text-white p-10 text-center animate-fadeIn">
+            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mb-4 text-3xl">⚠️</div>
+            <p className="font-bold text-sm leading-relaxed">{error}</p>
+            <button onClick={onClose} className="mt-8 px-8 py-3 bg-white text-rose-600 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg active:scale-95 transition-all">Entendido</button>
           </div>
         )}
       </div>
 
       <button 
         onClick={onClose}
-        className="mt-10 w-16 h-16 bg-white/10 backdrop-blur-xl border border-white/20 text-white rounded-full flex items-center justify-center text-2xl hover:bg-white/20 transition-all"
+        className="mt-12 w-16 h-16 bg-white text-slate-900 rounded-full flex items-center justify-center text-2xl shadow-2xl active:scale-90 transition-all border-4 border-white/20"
       >
         ✕
       </button>
 
       <style>{`
         @keyframes scannerLoop {
-          0% { top: 0; }
-          50% { top: 100%; }
-          100% { top: 0; }
+          0% { top: 5%; opacity: 0.5; }
+          50% { top: 95%; opacity: 1; }
+          100% { top: 5%; opacity: 0.5; }
         }
         .animate-scannerLoop {
-          animation: scannerLoop 2s infinite ease-in-out;
+          animation: scannerLoop 2.5s infinite ease-in-out;
         }
       `}</style>
     </div>

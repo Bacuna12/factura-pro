@@ -1,13 +1,13 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { AppSettings, BackupData, PdfTemplate, User, UserRole } from '../types';
+import React, { useState, useRef } from 'react';
+import { AppSettings, BackupData, PdfTemplate } from '../types';
 import { database } from '../services/databaseService';
+import { isSupabaseConfigured } from '../services/supabaseClient';
 import { 
-  exportClientsReport, 
-  exportProductsReport, 
-  exportToCSV, 
   exportSalesReport, 
-  exportExpensesReport 
+  exportExpensesReport,
+  exportProductsReport,
+  exportClientsReport
 } from '../services/pdfService';
 import ConfirmModal from './ConfirmModal';
 
@@ -24,41 +24,26 @@ interface SettingsProps {
   };
 }
 
-const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImportData, allData }) => {
+const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, allData }) => {
   const [formData, setFormData] = useState<AppSettings>({
     ...settings,
-    pdfTemplate: settings.pdfTemplate || PdfTemplate.PROFESSIONAL
+    pdfTemplate: settings.pdfTemplate || PdfTemplate.PROFESSIONAL,
+    bankName: settings.bankName || '',
+    accountType: settings.accountType || 'Ahorros',
+    accountNumber: settings.accountNumber || '',
+    bankCity: settings.bankCity || ''
   });
   
-  // Estados para reportes financieros
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [isReseting, setIsReseting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
-    d.setDate(1); // Primero de este mes
+    d.setDate(1);
     return d.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
-
-  const [dbStats, setDbStats] = useState(database.getStats());
-  const [users, setUsers] = useState<User[]>(() => JSON.parse(localStorage.getItem('facturapro_users') || '[]'));
-  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-  const [userForm, setUserForm] = useState<User>({
-    id: '', username: '', password: '', name: '', role: UserRole.SELLER
-  });
-  const [userToDelete, setUserToDelete] = useState<string | null>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setDbStats(database.getStats());
-  }, [allData]);
-
-  const templates = [
-    { id: PdfTemplate.PROFESSIONAL, name: 'Profesional', desc: 'Sólido y corporativo', icon: '🏛️' },
-    { id: PdfTemplate.MINIMALIST, name: 'Minimalista', desc: 'Limpio y moderno', icon: '🍃' },
-    { id: PdfTemplate.MODERN_DARK, name: 'Premium Dark', desc: 'Elegante y lujoso', icon: '💎' },
-    { id: PdfTemplate.COMPACT_TICKET, name: 'Ticket POS', desc: 'Compacto para recibos', icon: '🎫' },
-  ];
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -73,373 +58,187 @@ const Settings: React.FC<SettingsProps> = ({ settings, onUpdateSettings, onImpor
 
   const removeLogo = () => {
     setFormData({ ...formData, logo: undefined });
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleOpenUserModal = (u?: User) => {
-    if (u) {
-      setUserForm({ ...u });
-    } else {
-      setUserForm({
-        id: Math.random().toString(36).substr(2, 9),
-        username: '',
-        password: '',
-        name: '',
-        role: UserRole.SELLER
-      });
-    }
-    setIsUserModalOpen(true);
-  };
-
-  const handleSaveUser = (e: React.FormEvent) => {
-    e.preventDefault();
-    const exists = users.find(u => u.id === userForm.id);
-    let newUsers;
-    if (exists) {
-      newUsers = users.map(u => u.id === userForm.id ? userForm : u);
-    } else {
-      newUsers = [userForm, ...users];
-    }
-    setUsers(newUsers);
-    localStorage.setItem('facturapro_users', JSON.stringify(newUsers));
-    setIsUserModalOpen(false);
-  };
-
-  const handleDeleteUser = () => {
-    if (userToDelete) {
-      const newUsers = users.filter(u => u.id !== userToDelete);
-      setUsers(newUsers);
-      localStorage.setItem('facturapro_users', JSON.stringify(newUsers));
-      setUserToDelete(null);
-    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateSettings(formData);
-    alert('Configuración actualizada correctamente');
+    alert('Configuración actualizada correctamente.');
   };
+
+  const handleClearAllData = async () => {
+    setIsReseting(true);
+    try {
+      await database.clearAllTenantData(settings.tenantId);
+      alert("Todos los datos han sido eliminados correctamente. La aplicación se reiniciará.");
+      window.location.reload();
+    } catch (e) {
+      alert("Hubo un error al intentar eliminar los datos.");
+      setIsReseting(false);
+    }
+  };
+
+  // Funciones de Reportes
+  const handleExportSales = () => exportSalesReport(allData.documents, allData.clients, settings, startDate, endDate);
+  const handleExportExpenses = () => exportExpensesReport(allData.expenses, settings, startDate, endDate);
+  const handleExportInventory = () => exportProductsReport(allData.products, settings);
+  const handleExportClients = () => exportClientsReport(allData.clients, settings);
 
   return (
     <div className="space-y-8 animate-fadeIn pb-24 max-w-5xl mx-auto">
       <ConfirmModal 
-        isOpen={!!userToDelete}
-        title="Eliminar Usuario"
-        message="¿Estás seguro de que deseas eliminar este acceso? El usuario ya no podrá iniciar sesión."
-        onConfirm={handleDeleteUser}
-        onCancel={() => setUserToDelete(null)}
+        isOpen={isResetConfirmOpen}
+        title="BORRADO TOTAL DE DATOS"
+        message="¿Estás completamente seguro? Esta acción eliminará permanentemente todas tus facturas, gastos, productos y clientes tanto de este dispositivo como de la nube. Esta acción NO se puede deshacer."
+        confirmText={isReseting ? "Borrando..." : "SÍ, BORRAR TODO"}
+        cancelText="CANCELAR"
+        isDanger={true}
+        onConfirm={handleClearAllData}
+        onCancel={() => !isReseting && setIsResetConfirmOpen(false)}
       />
 
-      <header className="flex justify-between items-end">
-        <div>
-          <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">AJUSTES</h2>
-          <p className="text-slate-500 dark:text-slate-400 font-medium">Configuración de marca y sistema</p>
-        </div>
-        <div className="text-right">
-          <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Base de Datos</p>
-          <p className="text-sm font-black text-slate-900 dark:text-slate-100">{dbStats.totalRecords} Registros</p>
-        </div>
+      <header>
+        <h2 className="text-4xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Ajustes</h2>
+        <p className="text-slate-400 font-bold text-xs uppercase tracking-widest mt-1">Configuración del Sistema</p>
       </header>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        
-        {/* REPORTES FINANCIEROS Y CONTABLES */}
-        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-8 md:p-10 space-y-8">
-          <div className="flex items-center gap-4 border-b border-slate-50 dark:border-slate-800 pb-6">
-            <span className="text-3xl">💹</span>
-            <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Reportes Financieros</h3>
-          </div>
-
-          <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 space-y-6">
-            <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-4">Seleccionar Rango de Consulta</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Fecha Inicio</label>
-                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border border-slate-200 dark:border-slate-700 font-bold" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase ml-2">Fecha Fin</label>
-                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-3 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border border-slate-200 dark:border-slate-700 font-bold" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <div className="flex items-center justify-between ml-1">
-                <p className="text-[11px] font-black text-slate-800 dark:text-slate-400 uppercase tracking-widest">Ventas (Ingresos)</p>
-                <span className="bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[9px] px-2 py-0.5 rounded-lg font-black">ACTIVO</span>
-              </div>
-              <div className="flex gap-2">
-                <button 
-                  type="button" 
-                  onClick={() => exportSalesReport(allData.documents, allData.clients, settings, startDate, endDate)}
-                  className="flex-1 p-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 dark:shadow-none"
-                >
-                  <span>📥</span> PDF Ventas
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    const filtered = allData.documents.filter(d => d.date >= startDate && d.date <= endDate);
-                    exportToCSV(filtered, `Ventas_${startDate}_${endDate}`);
-                  }}
-                  className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black text-[10px] hover:bg-slate-200 transition-colors"
-                  title="CSV de Ventas"
-                >
-                  📊
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center justify-between ml-1">
-                <p className="text-[11px] font-black text-slate-800 dark:text-slate-400 uppercase tracking-widest">Gastos (Egresos)</p>
-                <span className="bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-[9px] px-2 py-0.5 rounded-lg font-black">ACTIVO</span>
-              </div>
-              <div className="flex gap-2">
-                <button 
-                  type="button" 
-                  onClick={() => exportExpensesReport(allData.expenses, settings, startDate, endDate)}
-                  className="flex-1 p-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 dark:shadow-none"
-                >
-                  <span>📥</span> PDF Gastos
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    const filtered = allData.expenses.filter(e => e.date >= startDate && e.date <= endDate);
-                    exportToCSV(filtered, `Gastos_${startDate}_${endDate}`);
-                  }}
-                  className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black text-[10px] hover:bg-slate-200 transition-colors"
-                  title="CSV de Gastos"
-                >
-                  📊
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* REPORTES DE MAESTROS */}
-        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-8 md:p-10 space-y-6">
-          <div className="flex items-center gap-4 border-b border-slate-50 dark:border-slate-800 pb-6">
-            <span className="text-3xl">📊</span>
-            <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Listados Maestros</h3>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Clientes ({allData.clients.length})</p>
-              <div className="flex gap-2">
-                <button 
-                  type="button" 
-                  onClick={() => exportClientsReport(allData.clients, settings)}
-                  className="flex-1 p-4 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-100 transition-colors"
-                >
-                  <span>📥</span> PDF Clientes
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => exportToCSV(allData.clients, 'Reporte_Clientes_FacturaPro')}
-                  className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black text-[10px] hover:bg-slate-200 transition-colors"
-                >
-                  📊
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Inventario ({allData.products.length})</p>
-              <div className="flex gap-2">
-                <button 
-                  type="button" 
-                  onClick={() => exportProductsReport(allData.products, settings)}
-                  className="flex-1 p-4 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-100 transition-colors"
-                >
-                  <span>📥</span> PDF Inventario
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => exportToCSV(allData.products, 'Reporte_Inventario_FacturaPro')}
-                  className="p-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black text-[10px] hover:bg-slate-200 transition-colors"
-                >
-                  📊
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-8 md:p-10 space-y-10">
+        {/* EMPRESA */}
+        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-10 space-y-10">
           <div className="flex items-center gap-4 border-b border-slate-50 dark:border-slate-800 pb-6">
             <span className="text-3xl">🏢</span>
-            <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Perfil de Empresa</h3>
+            <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Empresa e Identidad</h3>
           </div>
 
           <div className="flex flex-col md:flex-row gap-10 items-start">
             <div className="w-full md:w-48 space-y-4">
-               <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">Logo de Marca</p>
-               <div className="relative aspect-square w-full bg-slate-50 dark:bg-slate-800 rounded-[32px] border-2 border-dashed border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden group">
-                  {formData.logo ? (
-                    <img src={formData.logo} className="w-full h-full object-contain p-4" alt="Logo" />
-                  ) : (
-                    <span className="text-4xl opacity-20">🖼️</span>
-                  )}
+               <div className="relative aspect-square w-full bg-slate-50 dark:bg-slate-800 rounded-[32px] flex items-center justify-center overflow-hidden border-2 border-dashed border-slate-200">
+                  {formData.logo ? <img src={formData.logo} className="w-full h-full object-contain p-4" alt="Logo" /> : <span className="text-4xl opacity-20">🖼️</span>}
                   <input type="file" ref={fileInputRef} onChange={handleLogoUpload} className="hidden" accept="image/*" />
-                  <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 bg-white rounded-full text-slate-900 shadow-xl">✏️</button>
-                    {formData.logo && <button type="button" onClick={removeLogo} className="p-2 bg-rose-500 rounded-full text-white shadow-xl">✕</button>}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 hover:opacity-100 flex items-center justify-center gap-2 transition-all">
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 bg-white rounded-full">✏️</button>
+                    {formData.logo && <button type="button" onClick={removeLogo} className="p-2 bg-rose-500 text-white rounded-full">✕</button>}
                   </div>
                </div>
             </div>
 
             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2">Nombre Comercial</label>
-                <input required type="text" value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Nombre Comercial / Profesional</label>
+                <input required value={formData.companyName} onChange={e => setFormData({...formData, companyName: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border-none font-bold outline-none shadow-sm" />
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2">NIT / Identificación</label>
-                <input required type="text" value={formData.companyId} onChange={e => setFormData({...formData, companyId: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">C.C. / NIT</label>
+                <input required value={formData.companyId} onChange={e => setFormData({...formData, companyId: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border-none font-bold outline-none shadow-sm" />
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2">Impuesto por Defecto (%)</label>
-                <input required type="number" value={formData.defaultTaxRate} onChange={e => setFormData({...formData, defaultTaxRate: parseFloat(e.target.value)})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">IVA (%) por Defecto</label>
+                <input required type="number" value={formData.defaultTaxRate} onChange={e => setFormData({...formData, defaultTaxRate: parseFloat(e.target.value)})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border-none font-bold outline-none shadow-sm" />
               </div>
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-2">Dirección Principal</label>
-                <input required type="text" value={formData.companyAddress} onChange={e => setFormData({...formData, companyAddress: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-700 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Dirección de Contacto</label>
+                <input required value={formData.companyAddress} onChange={e => setFormData({...formData, companyAddress: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border-none font-bold outline-none shadow-sm" />
               </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-8 md:p-10 space-y-6">
-          <div className="flex justify-between items-center border-b border-slate-50 dark:border-slate-800 pb-6">
-            <div className="flex items-center gap-4">
-              <span className="text-3xl">👥</span>
-              <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Control de Accesos</h3>
+        {/* BANCARIO */}
+        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-10 space-y-8">
+          <div className="flex items-center gap-4 border-b border-slate-50 dark:border-slate-800 pb-6">
+            <span className="text-3xl">🏦</span>
+            <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Información Bancaria (Para Cobros)</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Banco</label>
+              <input value={formData.bankName} onChange={e => setFormData({...formData, bankName: e.target.value})} placeholder="Ej: BANCOLOMBIA" className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border-none font-bold outline-none shadow-sm" />
             </div>
-            <button 
-              type="button" 
-              onClick={() => handleOpenUserModal()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-100 dark:shadow-none"
-            >
-              + Nuevo Usuario
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Tipo de Cuenta</label>
+              <select value={formData.accountType} onChange={e => setFormData({...formData, accountType: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border-none font-bold outline-none shadow-sm">
+                <option value="Ahorros">Ahorros</option>
+                <option value="Corriente">Corriente</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Número de Cuenta</label>
+              <input value={formData.accountNumber} onChange={e => setFormData({...formData, accountNumber: e.target.value})} placeholder="Ej: 226-430236-48" className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border-none font-bold outline-none shadow-sm" />
+            </div>
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Ciudad de la Cuenta / Origen</label>
+              <input value={formData.bankCity} onChange={e => setFormData({...formData, bankCity: e.target.value})} placeholder="Ej: Medellín - Antioquia" className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border-none font-bold outline-none shadow-sm" />
+            </div>
+          </div>
+        </div>
+
+        {/* REPORTES */}
+        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-10 space-y-8">
+          <div className="flex items-center gap-4 border-b border-slate-50 dark:border-slate-800 pb-6">
+            <span className="text-3xl">📊</span>
+            <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Reportes y Exportación</h3>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Fecha Inicio</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border-none font-bold outline-none shadow-sm" />
+            </div>
+            <div>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Fecha Fin</label>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-4 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border-none font-bold outline-none shadow-sm" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <button type="button" onClick={handleExportSales} className="p-6 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-[32px] font-black text-[10px] uppercase tracking-widest flex flex-col items-center gap-3 hover:bg-blue-100 transition-all border border-blue-100 dark:border-blue-800">
+              <span className="text-2xl">💰</span>
+              Ventas
+            </button>
+            <button type="button" onClick={handleExportExpenses} className="p-6 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 rounded-[32px] font-black text-[10px] uppercase tracking-widest flex flex-col items-center gap-3 hover:bg-rose-100 transition-all border border-rose-100 dark:border-rose-800">
+              <span className="text-2xl">💸</span>
+              Gastos
+            </button>
+            <button type="button" onClick={handleExportInventory} className="p-6 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded-[32px] font-black text-[10px] uppercase tracking-widest flex flex-col items-center gap-3 hover:bg-emerald-100 transition-all border border-emerald-100 dark:border-emerald-800">
+              <span className="text-2xl">📦</span>
+              Inventario
+            </button>
+            <button type="button" onClick={handleExportClients} className="p-6 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded-[32px] font-black text-[10px] uppercase tracking-widest flex flex-col items-center gap-3 hover:bg-indigo-100 transition-all border border-indigo-100 dark:border-indigo-800">
+              <span className="text-2xl">👤</span>
+              Clientes
             </button>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {users.map(u => (
-              <div key={u.id} className="p-5 rounded-3xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex justify-between items-center group">
-                <div>
-                  <p className="font-black text-slate-900 dark:text-white leading-none">{u.name}</p>
-                  <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase mt-1 tracking-wider">{u.username}</p>
-                  <span className={`inline-block mt-2 px-2 py-0.5 rounded-lg text-[8px] font-black uppercase ${
-                    u.role === UserRole.ADMIN ? 'bg-violet-100 dark:bg-violet-900/30 text-violet-600' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600'
-                  }`}>
-                    {u.role}
-                  </span>
-                </div>
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                   <button type="button" onClick={() => handleOpenUserModal(u)} className="p-2 text-slate-400 hover:text-blue-600 transition-colors">✏️</button>
-                   <button type="button" onClick={() => setUserToDelete(u.id)} className="p-2 text-slate-400 hover:text-rose-600 transition-colors">🗑️</button>
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-slate-100 dark:border-slate-800 p-8 md:p-10 space-y-6">
-          <div className="flex items-center gap-4 border-b border-slate-50 dark:border-slate-800 pb-6">
-            <span className="text-3xl">📄</span>
-            <h3 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">Estilo de Documentos</h3>
-          </div>
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {templates.map(tmp => (
-              <button
-                key={tmp.id}
-                type="button"
-                onClick={() => setFormData({...formData, pdfTemplate: tmp.id})}
-                className={`p-6 rounded-[32px] border-2 text-left transition-all relative overflow-hidden group active:scale-95 ${
-                  formData.pdfTemplate === tmp.id 
-                  ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20' 
-                  : 'border-slate-50 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 hover:border-slate-200 dark:hover:border-slate-700'
-                }`}
-              >
-                <div className="text-3xl mb-4">{tmp.icon}</div>
-                <h4 className={`font-black text-sm mb-1 ${formData.pdfTemplate === tmp.id ? 'text-blue-900 dark:text-blue-400' : 'text-slate-800 dark:text-slate-100'}`}>{tmp.name}</h4>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{tmp.desc}</p>
-                {formData.pdfTemplate === tmp.id && (
-                  <div className="absolute top-4 right-4 text-blue-600 dark:text-blue-400 text-xl font-black">✓</div>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
+        <button type="submit" className="w-full py-6 bg-blue-600 text-white rounded-[32px] font-black shadow-xl active:scale-[0.98] transition-all uppercase tracking-widest text-sm">
+          Guardar Cambios de Configuración
+        </button>
 
-        <div className="flex flex-col md:flex-row gap-4 items-center">
-          <button type="submit" className="flex-1 py-6 bg-slate-900 dark:bg-blue-600 text-white rounded-[32px] font-black shadow-xl shadow-slate-200 dark:shadow-none active:scale-[0.98] transition-all uppercase tracking-widest text-sm">
-            Guardar Todo los Ajustes
-          </button>
+        {/* ZONA DE PELIGRO */}
+        <div className="bg-rose-50 dark:bg-rose-900/10 rounded-[40px] border-2 border-dashed border-rose-200 dark:border-rose-900/30 p-10 space-y-6">
+          <div className="flex items-center gap-4">
+            <span className="text-3xl">⚠️</span>
+            <div>
+              <h3 className="text-xl font-black text-rose-800 dark:text-rose-400 uppercase tracking-tight">Zona de Peligro</h3>
+              <p className="text-rose-600 dark:text-rose-500 text-[11px] font-bold uppercase tracking-widest mt-1">Acciones irreversibles</p>
+            </div>
+          </div>
           
-          <div className="flex gap-2">
-            <button type="button" onClick={() => database.clearDatabase()} className="p-6 bg-rose-50 dark:bg-rose-900/20 text-rose-600 rounded-[32px] font-black border border-rose-100 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors" title="Limpiar Base de Datos">🗑️</button>
-            <button type="button" onClick={() => importInputRef.current?.click()} className="p-6 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-[32px] font-black border border-blue-100 dark:border-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors" title="Importar Backup">📥</button>
-            <input type="file" ref={importInputRef} onChange={e => {
-               const file = e.target.files?.[0];
-               if (file) {
-                 const reader = new FileReader();
-                 reader.onload = (ev) => onImportData(JSON.parse(ev.target?.result as string));
-                 reader.readAsText(file);
-               }
-            }} className="hidden" accept=".json" />
+          <div className="p-6 bg-white dark:bg-slate-950 rounded-3xl border border-rose-100 dark:border-rose-900/30 flex flex-col md:flex-row justify-between items-center gap-6">
+             <div className="flex-1 text-center md:text-left">
+                <h4 className="font-black text-slate-900 dark:text-white text-sm">Borrado Definitivo de Datos</h4>
+                <p className="text-slate-500 text-xs font-medium">Esta acción eliminará todos los documentos, clientes, catálogo y gastos de forma permanente de este dispositivo y de la nube.</p>
+             </div>
+             <button 
+              type="button" 
+              onClick={() => setIsResetConfirmOpen(true)}
+              className="px-8 py-4 bg-rose-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-rose-200 dark:shadow-none hover:bg-rose-700 transition-all active:scale-95"
+            >
+              Borrar todos los datos
+            </button>
           </div>
         </div>
       </form>
-
-      {isUserModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[99999] flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-950 rounded-[40px] w-full max-md overflow-hidden shadow-2xl animate-slideUp">
-             <div className="bg-slate-900 dark:bg-slate-900 p-8 text-white relative">
-                <h3 className="text-2xl font-black">{users.find(u => u.id === userForm.id) ? 'Editar Acceso' : 'Nuevo Usuario'}</h3>
-                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-1">Definir credenciales y permisos</p>
-                <button onClick={() => setIsUserModalOpen(false)} className="absolute top-6 right-6 text-white/50 hover:text-white text-2xl transition-all">✕</button>
-             </div>
-             
-             <form onSubmit={handleSaveUser} className="p-8 space-y-5 bg-white dark:bg-slate-950">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-1 ml-1">Nombre Completo</label>
-                  <input required value={userForm.name} onChange={e => setUserForm({...userForm, name: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="Ej. Ana García" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-1 ml-1">Email / Usuario</label>
-                  <input required type="email" value={userForm.username} onChange={e => setUserForm({...userForm, username: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="ana@empresa.com" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-1 ml-1">Contraseña</label>
-                  <input required type="password" value={userForm.password} onChange={e => setUserForm({...userForm, password: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500" placeholder="••••••••" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest px-1 ml-1">Rol de Acceso</label>
-                  <select 
-                    value={userForm.role}
-                    onChange={e => setUserForm({...userForm, role: e.target.value as UserRole})}
-                    className="w-full p-4 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white border border-slate-100 dark:border-slate-800 rounded-2xl font-bold outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={UserRole.SELLER}>Vendedor (Solo Operación)</option>
-                    <option value={UserRole.ADMIN}>Administrador (Control Total)</option>
-                  </select>
-                </div>
-                <button type="submit" className="w-full py-5 bg-slate-900 dark:bg-blue-600 text-white rounded-3xl font-black shadow-xl uppercase tracking-widest text-xs active:scale-95 transition-all">
-                  Guardar Usuario
-                </button>
-             </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -5,7 +5,6 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const extractClientDataFromId = async (base64Image: string): Promise<{name: string, taxId: string, address: string, city: string}> => {
   try {
-    // Correct way to use multiple parts for vision tasks
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: {
@@ -36,7 +35,6 @@ export const extractClientDataFromId = async (base64Image: string): Promise<{nam
       }
     });
     
-    // Accessing .text as a property, not a method
     return JSON.parse(response.text?.trim() || "{}");
   } catch (error) {
     console.error("Error al extraer datos con Gemini:", error);
@@ -46,13 +44,11 @@ export const extractClientDataFromId = async (base64Image: string): Promise<{nam
 
 export const generateProfessionalDescription = async (basicText: string): Promise<string> => {
   try {
-    // Direct call with text contents
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Convierte esta descripción básica de un servicio en una descripción profesional para factura en español: "${basicText}". Solo el texto mejorado.`,
       config: { 
         temperature: 0.7 
-        // maxOutputTokens removed to avoid mandatory thinkingBudget setting
       }
     });
     return response.text?.trim() || basicText;
@@ -113,35 +109,5 @@ export const suggestInvoiceNotes = async (type: string, amount: number, currency
     return response.text?.trim() || "";
   } catch (error) {
     return "";
-  }
-};
-
-export const generateWelcomeEmail = async (userName: string, companyName: string): Promise<string> => {
-  try {
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Email de bienvenida para ${userName} de la empresa ${companyName}.`,
-      config: { 
-        temperature: 0.8 
-      }
-    });
-    return response.text?.trim() || `Bienvenido, ${userName}.`;
-  } catch (error) {
-    return "Bienvenido a FacturaPro.";
-  }
-};
-
-export const generateRecoveryEmail = async (userName: string, passwordHint: string): Promise<string> => {
-  try {
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Email de recuperación para ${userName}. Contraseña: ${passwordHint}.`,
-      config: { 
-        temperature: 0.4 
-      }
-    });
-    return response.text?.trim() || `Tu contraseña es: ${passwordHint}`;
-  } catch (error) {
-    return `Tu contraseña es: ${passwordHint}`;
   }
 };
