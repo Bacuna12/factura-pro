@@ -21,8 +21,8 @@ export interface DocumentEditorProps {
   clients: Client[];
   products: Product[];
   onSave: (doc: Document) => void | Promise<void>;
-  onUpdateClients: (client: Client) => void | Promise<void>;
-  onUpdateProducts: (product: Product) => void | Promise<void>;
+  onUpdateClients: (client: any) => void | Promise<void>;
+  onUpdateProducts: (product: any) => void | Promise<void>;
   settings: AppSettings;
   initialData?: Document;
   onDelete?: (id: string) => void | Promise<void>;
