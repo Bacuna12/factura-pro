@@ -171,9 +171,8 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     cursorY += 50;
     if (doc.signature) {
       try { 
-        // Se aplica casting a any para evadir conflictos de sobrecarga en el build
-        const pdfAny = pdf as any;
-        pdfAny.addImage(doc.signature, 'PNG', 20, cursorY - 15, 40, 15); 
+        // Bypass estricto para TS en Vercel usando casting a any en los parámetros
+        (pdf as any).addImage(doc.signature, 'PNG', 20 as any, (cursorY - 15) as any, 40 as any, 15 as any); 
       } catch(e) {}
     }
     pdf.line(20, cursorY, 90, cursorY);

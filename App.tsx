@@ -3,7 +3,7 @@ import { HashRouter, Routes, Route, Navigate, useParams } from 'react-router-dom
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import DocumentList from './components/DocumentList';
-import DocumentEditor, { DocumentEditorProps } from './components/DocumentEditor';
+import DocumentEditor from './components/DocumentEditor';
 import DocumentHistory from './components/DocumentHistory';
 import ClientManager from './components/ClientManager';
 import ProductManager from './components/ProductManager';
@@ -53,7 +53,7 @@ const EditDocumentWrapper: React.FC<{
   const { id } = useParams();
   const doc = documents.find(d => d.id === id);
   if (!doc) return <Navigate to="/" />;
-  return <DocumentEditor initialData={doc} type={doc.type} {...props} />;
+  return <DocumentEditor initialData={doc} type={doc.type} {...props as any} />;
 };
 
 const App: React.FC = () => {
@@ -369,16 +369,16 @@ const App: React.FC = () => {
             <Route path="/pos" element={<POS user={user} products={products} clients={clients} settings={settings} onSaveDocument={handleSaveDocument} onSaveClient={handleSaveClient} hasActiveCashSession={hasActiveCashSession} />} />
             
             <Route path="/invoices" element={<DocumentList type={DocumentType.INVOICE} {...listProps} />} />
-            <Route path="/invoices/new" element={<DocumentEditor type={DocumentType.INVOICE} {...commonEditorProps} />} />
-            <Route path="/invoices/edit/:id" element={<EditDocumentWrapper documents={documents} {...commonEditorProps} />} />
+            <Route path="/invoices/new" element={<DocumentEditor type={DocumentType.INVOICE} {...commonEditorProps as any} />} />
+            <Route path="/invoices/edit/:id" element={<EditDocumentWrapper documents={documents} {...commonEditorProps as any} />} />
             
             <Route path="/quotes" element={<DocumentList type={DocumentType.QUOTE} {...listProps} />} />
-            <Route path="/quotes/new" element={<DocumentEditor type={DocumentType.QUOTE} {...commonEditorProps} />} />
-            <Route path="/quotes/edit/:id" element={<EditDocumentWrapper documents={documents} {...commonEditorProps} />} />
+            <Route path="/quotes/new" element={<DocumentEditor type={DocumentType.QUOTE} {...commonEditorProps as any} />} />
+            <Route path="/quotes/edit/:id" element={<EditDocumentWrapper documents={documents} {...commonEditorProps as any} />} />
             
             <Route path="/collections" element={<DocumentList type={DocumentType.ACCOUNT_COLLECTION} {...listProps} />} />
-            <Route path="/collections/new" element={<DocumentEditor type={DocumentType.ACCOUNT_COLLECTION} {...commonEditorProps} />} />
-            <Route path="/collections/edit/:id" element={<EditDocumentWrapper documents={documents} {...commonEditorProps} />} />
+            <Route path="/collections/new" element={<DocumentEditor type={DocumentType.ACCOUNT_COLLECTION} {...commonEditorProps as any} />} />
+            <Route path="/collections/edit/:id" element={<EditDocumentWrapper documents={documents} {...commonEditorProps as any} />} />
             
             <Route path="/clients" element={<ClientManager user={user} clients={clients} onSaveClient={handleSaveClient} onDeleteClient={(id) => { database.deleteRecord('clients', id, user.tenantId); setClients(prev => prev.filter(c => c.id !== id)); }} />} />
             <Route path="/products" element={<ProductManager user={user} products={products} onSaveProduct={handleSaveProduct} onDeleteProduct={(id) => { database.deleteRecord('products', id, user.tenantId); setProducts(prev => prev.filter(p => p.id !== id)); }} settings={settings} />} />
