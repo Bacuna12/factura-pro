@@ -171,8 +171,8 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     cursorY += 50;
     if (doc.signature) {
       try { 
-        // Llamado forzado sin validación de tipos para jsPDF
-        const pdfAny: any = pdf;
+        // Se aplica casting a any para evadir conflictos de sobrecarga en el build
+        const pdfAny = pdf as any;
         pdfAny.addImage(doc.signature, 'PNG', 20, cursorY - 15, 40, 15); 
       } catch(e) {}
     }
