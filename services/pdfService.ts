@@ -3,9 +3,6 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Document, Client, DocumentType, AppSettings, Expense, Product, CashSession, CashMovement, CashMovementType } from '../types';
 
-type ColorTuple = [number, number, number];
-
-// Helper to convert numbers to text in Spanish for document totals
 const numeroALetras = (num: number): string => {
   const Unidades = (num: number) => {
     switch (num) {
@@ -15,7 +12,7 @@ const numeroALetras = (num: number): string => {
     }
     return '';
   };
-  const Decenas = (num: number) => {
+  const Decenas = (num: number): string => {
     const decena = Math.floor(num / 10);
     const unidad = num - (decena * 10);
     switch (decena) {
@@ -38,7 +35,7 @@ const numeroALetras = (num: number): string => {
     return '';
   };
   const DecenasY = (str: string, unidad: number) => unidad > 0 ? str + ' y ' + Unidades(unidad) : str;
-  const Centenas = (num: number) => {
+  const Centenas = (num: number): string => {
     const centenasInt = Math.floor(num / 100);
     const decenas = num - (centenasInt * 100);
     switch (centenasInt) {
@@ -66,7 +63,7 @@ const numeroALetras = (num: number): string => {
     }
     return letras;
   };
-  const Miles = (num: number) => {
+  const Miles = (num: number): string => {
     const divisor = 1000;
     const puntero = Math.floor(num / divisor);
     const resto = num - (puntero * divisor);
@@ -75,7 +72,7 @@ const numeroALetras = (num: number): string => {
     if (strMiles === '') return strCentenas;
     return strMiles + ' ' + strCentenas;
   };
-  const Millones = (num: number) => {
+  const Millones = (num: number): string => {
     const divisor = 1000000;
     const puntero = Math.floor(num / divisor);
     const resto = num - (puntero * divisor);
@@ -90,7 +87,6 @@ const numeroALetras = (num: number): string => {
   return (final.charAt(0).toUpperCase() + final.slice(1)).trim();
 };
 
-// Robust currency formatting helper
 export const formatCurrencyHelper = (amount: number, currency?: string) => {
   const validCurrency = (currency && currency.length === 3) ? currency : 'COP';
   try {
@@ -104,7 +100,6 @@ export const formatCurrencyHelper = (amount: number, currency?: string) => {
   }
 };
 
-// Standard PDF header generator for reports
 const generatePdfHeader = (pdf: jsPDF, title: string, settings: AppSettings, startDate?: string, endDate?: string) => {
   pdf.setFillColor(15, 23, 42);
   pdf.rect(0, 0, 210, 45, 'F');
@@ -122,7 +117,6 @@ const generatePdfHeader = (pdf: jsPDF, title: string, settings: AppSettings, sta
   }
 };
 
-// Internal function to generate the document PDF blob
 const generatePdfBlob = (doc: Document, client: Client | undefined, settings: AppSettings): jsPDF => {
   const isTicket = doc.isPOS;
   const isCollection = doc.type === DocumentType.ACCOUNT_COLLECTION;
@@ -213,7 +207,6 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     return pdf;
   }
 
-  // A4 Standard Template
   pdf.setFillColor(15, 23, 42);
   pdf.rect(0, 0, 210, 40, 'F');
   pdf.setTextColor(255);
@@ -252,7 +245,6 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
   return pdf;
 };
 
-// Exports a document to PDF and opens in a new tab
 export const exportToPDF = (doc: Document, client: Client | undefined, settings: AppSettings) => {
   try {
     const pdf = generatePdfBlob(doc, client, settings);
@@ -263,7 +255,6 @@ export const exportToPDF = (doc: Document, client: Client | undefined, settings:
   }
 };
 
-// Shares a document details via WhatsApp
 export const shareViaWhatsApp = (doc: Document, client: Client | undefined, settings: AppSettings, phone: string) => {
   const total = doc.items.reduce((acc, i) => acc + (i.quantity * i.unitPrice), 0);
   const message = `Hola ${client?.name || 'Cliente'},\n\nTe adjuntamos el detalle de tu ${doc.type} No. ${doc.number} por un valor de ${formatCurrencyHelper(total, settings.currency)}.\n\nGracias por tu confianza.\n${settings.companyName}`;
@@ -272,7 +263,6 @@ export const shareViaWhatsApp = (doc: Document, client: Client | undefined, sett
   window.open(`https://wa.me/${cleanPhone}?text=${encodedMessage}`, '_blank');
 };
 
-// Exports a summary sales report in PDF
 export const exportSalesReport = (documents: Document[], clients: Client[], settings: AppSettings, startDate: string, endDate: string) => {
   const pdf = new jsPDF();
   generatePdfHeader(pdf, "REPORTE DE VENTAS", settings, startDate, endDate);
@@ -303,7 +293,6 @@ export const exportSalesReport = (documents: Document[], clients: Client[], sett
   pdf.save(`reporte-ventas-${startDate}-a-${endDate}.pdf`);
 };
 
-// Exports a summary expenses report in PDF
 export const exportExpensesReport = (expenses: Expense[], settings: AppSettings, startDate: string, endDate: string) => {
   const pdf = new jsPDF();
   generatePdfHeader(pdf, "REPORTE DE GASTOS", settings, startDate, endDate);
@@ -329,7 +318,6 @@ export const exportExpensesReport = (expenses: Expense[], settings: AppSettings,
   pdf.save(`reporte-gastos-${startDate}-a-${endDate}.pdf`);
 };
 
-// Exports inventory listing report in PDF
 export const exportProductsReport = (products: Product[], settings: AppSettings) => {
   const pdf = new jsPDF();
   generatePdfHeader(pdf, "INVENTARIO DE PRODUCTOS", settings);
@@ -349,7 +337,6 @@ export const exportProductsReport = (products: Product[], settings: AppSettings)
   pdf.save(`reporte-inventario.pdf`);
 };
 
-// Exports client directory report in PDF
 export const exportClientsReport = (clients: Client[], settings: AppSettings) => {
   const pdf = new jsPDF();
   generatePdfHeader(pdf, "DIRECTORIO DE CLIENTES", settings);
@@ -368,7 +355,6 @@ export const exportClientsReport = (clients: Client[], settings: AppSettings) =>
   pdf.save(`reporte-clientes.pdf`);
 };
 
-// Exports a detailed cash session closing report in PDF
 export const exportCashSessionReport = (session: CashSession, movements: CashMovement[], documents: Document[], settings: AppSettings) => {
   const pdf = new jsPDF();
   generatePdfHeader(pdf, "REPORTE DE CIERRE DE CAJA", settings);
@@ -388,7 +374,6 @@ export const exportCashSessionReport = (session: CashSession, movements: CashMov
   const movInTotal = movements.filter(m => m.type === CashMovementType.IN).reduce((acc, m) => acc + m.amount, 0);
   const movOutTotal = movements.filter(m => m.type === CashMovementType.OUT).reduce((acc, m) => acc + m.amount, 0);
   
-  // Calculate expected balance based on initial + sales + manual movements
   const cashSales = session.expectedBalance - session.openingBalance - (movInTotal - movOutTotal);
 
   const summary = [

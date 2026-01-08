@@ -13,9 +13,9 @@ const toSnakePayload = (data: any, tenantId: string) => {
   return payload;
 };
 
-const fromSnakeResponse = (data: any) => {
+const fromSnakeResponse = (data: any): any => {
   if (!data) return data;
-  if (Array.isArray(data)) return data.map(fromSnakeResponse);
+  if (Array.isArray(data)) return data.map(item => fromSnakeResponse(item));
   const mapped: any = { ...data };
   if (data.tenantid) mapped.tenantId = data.tenantid;
   if (data.taxidtype) mapped.taxIdType = data.taxidtype;
@@ -53,7 +53,6 @@ export const database = {
     let localSuccess = false;
     let cloudSuccess = false;
 
-    // 1. GUARDADO LOCAL
     const localKey = table === 'settings' ? `facturapro_settings_${tenantId}` : `facturapro_${table}_${tenantId}`;
     try {
       if (table === 'settings') {
@@ -71,7 +70,6 @@ export const database = {
       console.error("Local Save Error:", e);
     }
 
-    // 2. SINCRONIZACIÓN NUBE
     if (isSupabaseConfigured() && navigator.onLine) {
       const payload = toSnakePayload(data, tenantId);
       if (table === 'settings') payload.id = tenantId;

@@ -42,8 +42,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
   const [activeDocForWhatsApp, setActiveDocForWhatsApp] = useState<Document | null>(null);
   const [whatsappPhone, setWhatsappPhone] = useState('');
 
-  const isCollection = type === DocumentType.ACCOUNT_COLLECTION;
-
   const getClient = (id: string) => clients.find(c => c.id === id);
   const getClientName = (id: string) => getClient(id)?.name || 'Cliente desconocido';
 
@@ -193,7 +191,7 @@ const DocumentList: React.FC<DocumentListProps> = ({
           <h2 className="text-3xl font-black text-gray-900 dark:text-white tracking-tight uppercase">{type}S</h2>
           <p className="text-gray-500 dark:text-slate-400 font-medium">Gestión de operaciones históricas</p>
         </div>
-        <button onClick={() => navigate(`${getRouteBase(type)}/new`)} className={`w-full sm:w-auto px-6 py-4 text-white rounded-2xl font-bold shadow-lg transition-all flex items-center justify-center space-x-2 active:scale-95 ${isCollection ? 'bg-violet-600 shadow-violet-100' : 'bg-blue-600 shadow-blue-100'}`}>
+        <button onClick={() => navigate(`${getRouteBase(type)}/new`)} className={`w-full sm:w-auto px-6 py-4 text-white rounded-2xl font-bold shadow-lg transition-all flex items-center justify-center space-x-2 active:scale-95 ${type === DocumentType.ACCOUNT_COLLECTION ? 'bg-violet-600 shadow-violet-100' : 'bg-blue-600 shadow-blue-100'}`}>
           <span className="text-xl font-black">+</span>
           <span className="uppercase tracking-widest text-xs">Crear {type}</span>
         </button>
@@ -223,7 +221,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
         </div>
       </div>
 
-      {/* VISTA MOBILE */}
       <div className="grid grid-cols-1 gap-4 md:hidden">
         {filteredDocs.map(doc => {
           const total = calculateTotal(doc);
@@ -280,7 +277,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
         })}
       </div>
 
-      {/* VISTA DESKTOP */}
       <div className="hidden md:block bg-white dark:bg-slate-900 rounded-[40px] shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -315,10 +311,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
                           <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase ${isPOSRow ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
                             {isPOSRow ? 'FACTURA POS' : doc.type}
                           </span>
-                          <div className="flex items-center gap-2">
-                             <div className="w-4 h-4 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-[7px] font-black uppercase text-slate-500">{doc.createdByName?.charAt(0)}</div>
-                             <p className="text-[9px] font-bold text-slate-500 dark:text-slate-500">{doc.createdByName || 'N/A'}</p>
-                          </div>
                        </div>
                     </td>
                     <td className="px-8 py-5">
@@ -368,21 +360,6 @@ const DocumentList: React.FC<DocumentListProps> = ({
             
             <form onSubmit={handleRegisterPayment} className="flex flex-col flex-1 overflow-hidden">
               <div className="p-8 space-y-6 overflow-y-auto flex-1">
-                <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Seleccionar Método</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {['Efectivo', 'Nequi', 'Tarjeta', 'Crédito', 'Transferencia'].map(m => (
-                      <button 
-                        key={m} 
-                        type="button" 
-                        onClick={() => setPaymentMethod(m)} 
-                        className={`py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${paymentMethod === m ? 'bg-blue-600 text-white border-blue-600 shadow-lg' : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-transparent hover:border-blue-200'}`}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
                 <div className="space-y-3">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Monto</label>
                   <input type="number" required step="any" value={paymentAmountStr} onChange={e => setPaymentAmountStr(e.target.value)} className="w-full p-5 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white rounded-2xl border-2 border-slate-200 dark:border-slate-700 font-black text-3xl text-blue-600 outline-none" />
