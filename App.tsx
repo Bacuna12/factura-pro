@@ -1,10 +1,9 @@
-
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { HashRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import DocumentList from './components/DocumentList';
-import DocumentEditor from './components/DocumentEditor';
+import DocumentEditor, { DocumentEditorProps } from './components/DocumentEditor';
 import DocumentHistory from './components/DocumentHistory';
 import ClientManager from './components/ClientManager';
 import ProductManager from './components/ProductManager';
@@ -45,9 +44,9 @@ const EditDocumentWrapper: React.FC<{
   documents: Document[], 
   clients: Client[], 
   products: Product[], 
-  onSave: (doc: Document) => void,
-  onUpdateClients: (client: Client) => void,
-  onUpdateProducts: (product: Product) => void,
+  onSave: (doc: Document) => void | Promise<void>,
+  onUpdateClients: (client: Client) => void | Promise<void>,
+  onUpdateProducts: (product: Product) => void | Promise<void>,
   settings: AppSettings,
   hasActiveCashSession: boolean
 }> = ({ documents, ...props }) => {
@@ -334,7 +333,7 @@ const App: React.FC = () => {
 
   if (!user) return <Auth onLogin={handleLogin} />;
 
-  const editorProps = {
+  const commonEditorProps = {
     user,
     clients,
     products,
@@ -368,15 +367,19 @@ const App: React.FC = () => {
             <Route path="/search" element={<DocumentHistory user={user} documents={documents} clients={clients} settings={settings} onDelete={handleDeleteDoc} onUpdateDocument={handleSaveDocument} />} />
             <Route path="/cash" element={<CashRegister user={user} settings={settings} sessions={sessions} movements={movements} documents={documents} onSaveSession={handleSaveSession} onSaveMovement={handleSaveMovement} />} />
             <Route path="/pos" element={<POS user={user} products={products} clients={clients} settings={settings} onSaveDocument={handleSaveDocument} onSaveClient={handleSaveClient} hasActiveCashSession={hasActiveCashSession} />} />
+            
             <Route path="/invoices" element={<DocumentList type={DocumentType.INVOICE} {...listProps} />} />
-            <Route path="/invoices/new" element={<DocumentEditor type={DocumentType.INVOICE} {...editorProps} />} />
-            <Route path="/invoices/edit/:id" element={<EditDocumentWrapper documents={documents} {...editorProps} />} />
+            <Route path="/invoices/new" element={<DocumentEditor type={DocumentType.INVOICE} {...commonEditorProps} />} />
+            <Route path="/invoices/edit/:id" element={<EditDocumentWrapper documents={documents} {...commonEditorProps} />} />
+            
             <Route path="/quotes" element={<DocumentList type={DocumentType.QUOTE} {...listProps} />} />
-            <Route path="/quotes/new" element={<DocumentEditor type={DocumentType.QUOTE} {...editorProps} />} />
-            <Route path="/quotes/edit/:id" element={<EditDocumentWrapper documents={documents} {...editorProps} />} />
+            <Route path="/quotes/new" element={<DocumentEditor type={DocumentType.QUOTE} {...commonEditorProps} />} />
+            <Route path="/quotes/edit/:id" element={<EditDocumentWrapper documents={documents} {...commonEditorProps} />} />
+            
             <Route path="/collections" element={<DocumentList type={DocumentType.ACCOUNT_COLLECTION} {...listProps} />} />
-            <Route path="/collections/new" element={<DocumentEditor type={DocumentType.ACCOUNT_COLLECTION} {...editorProps} />} />
-            <Route path="/collections/edit/:id" element={<EditDocumentWrapper documents={documents} {...editorProps} />} />
+            <Route path="/collections/new" element={<DocumentEditor type={DocumentType.ACCOUNT_COLLECTION} {...commonEditorProps} />} />
+            <Route path="/collections/edit/:id" element={<EditDocumentWrapper documents={documents} {...commonEditorProps} />} />
+            
             <Route path="/clients" element={<ClientManager user={user} clients={clients} onSaveClient={handleSaveClient} onDeleteClient={(id) => { database.deleteRecord('clients', id, user.tenantId); setClients(prev => prev.filter(c => c.id !== id)); }} />} />
             <Route path="/products" element={<ProductManager user={user} products={products} onSaveProduct={handleSaveProduct} onDeleteProduct={(id) => { database.deleteRecord('products', id, user.tenantId); setProducts(prev => prev.filter(p => p.id !== id)); }} settings={settings} />} />
             <Route path="/expenses" element={<ExpenseManager expenses={expenses} products={products} onSaveProduct={handleSaveProduct} onSaveExpense={handleSaveExpense} onDeleteExpense={(id) => { database.deleteRecord('expenses', id, user.tenantId); setExpenses(prev => prev.filter(e => e.id !== id)); }} settings={settings} />} />

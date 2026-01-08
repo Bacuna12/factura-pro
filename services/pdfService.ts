@@ -1,4 +1,3 @@
-
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Document, Client, DocumentType, AppSettings, Expense, Product, CashSession, CashMovement, CashMovementType } from '../types';
@@ -172,11 +171,8 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     cursorY += 50;
     if (doc.signature) {
       try { 
-        const signatureX: any = 20;
-        const signatureY: any = cursorY - 15;
-        const signatureW: any = 40;
-        const signatureH: any = 15;
-        (pdf as any).addImage(doc.signature, 'PNG', signatureX, signatureY, signatureW, signatureH); 
+        // Cast to any to bypass potential strict type overloads in Vercel environment
+        (pdf as any).addImage(doc.signature, 'PNG', 20 as any, (cursorY - 15) as any, 40 as any, 15 as any); 
       } catch(e) {}
     }
     pdf.line(20, cursorY, 90, cursorY);

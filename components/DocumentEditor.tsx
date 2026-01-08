@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -21,12 +20,12 @@ export interface DocumentEditorProps {
   type: DocumentType;
   clients: Client[];
   products: Product[];
-  onSave: (doc: Document) => void;
-  onUpdateClients: (client: Client) => void;
-  onUpdateProducts: (product: Product) => void;
+  onSave: (doc: Document) => void | Promise<void>;
+  onUpdateClients: (client: Client) => void | Promise<void>;
+  onUpdateProducts: (product: Product) => void | Promise<void>;
   settings: AppSettings;
   initialData?: Document;
-  onDelete?: (id: string) => void;
+  onDelete?: (id: string) => void | Promise<void>;
   hasActiveCashSession: boolean;
 }
 
