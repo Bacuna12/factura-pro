@@ -172,8 +172,11 @@ const generatePdfBlob = (doc: Document, client: Client | undefined, settings: Ap
     cursorY += 50;
     if (doc.signature) {
       try { 
-        // Cast to any to bypass potential strict type overloads in specific environments
-        (pdf as any).addImage(doc.signature, 'PNG', (20 as any), (cursorY - 15 as any), (40 as any), (15 as any)); 
+        const signatureX: any = 20;
+        const signatureY: any = cursorY - 15;
+        const signatureW: any = 40;
+        const signatureH: any = 15;
+        (pdf as any).addImage(doc.signature, 'PNG', signatureX, signatureY, signatureW, signatureH); 
       } catch(e) {}
     }
     pdf.line(20, cursorY, 90, cursorY);

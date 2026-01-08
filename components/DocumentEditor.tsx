@@ -16,7 +16,7 @@ import { suggestInvoiceNotes } from '../services/geminiService';
 import { exportToPDF } from '../services/pdfService';
 import ConfirmModal from './ConfirmModal';
 
-interface DocumentEditorProps {
+export interface DocumentEditorProps {
   user: User;
   type: DocumentType;
   clients: Client[];
